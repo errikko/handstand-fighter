@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Handstand Fighter</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0f;
+    color: #e8e0d0;
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  #title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 13px;
+    color: #f0c040;
+    text-shadow: 0 0 20px #f0c04066;
+    padding: 14px 0 10px;
+    letter-spacing: 1px;
+  }
+
+  #arena {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 0 16px;
+    width: 100%;
+    max-width: 960px;
+  }
+
+  /* --- CAMERA SIDE --- */
+  #cam-panel {
+    flex: 1;
+    position: relative;
+    border: 2px solid #2a2a3a;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #111118;
+    min-width: 0;
+  }
+
+  #video { display: none; }
+
+  #pose-canvas {
+    width: 100%;
+    display: block;
+    border-radius: 6px;
+  }
+
+  #status-bar {
+    position: absolute;
+    top: 8px; left: 8px; right: 8px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .status-pill {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  .pill-waiting { background: #2a2a3a; color: #888; }
+  .pill-detecting { background: #1a3a1a; color: #4caf50; }
+  .pill-handstand { background: #3a2800; color: #f0c040; }
+  .pill-pushup { background: #1a003a; color: #c080ff; }
+
+  #reps-badge {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    color: #c080ff;
+    background: #1a003a;
+    border: 1px solid #c080ff44;
+    border-radius: 6px;
+    padding: 4px 10px;
+    margin-left: auto;
+  }
+
+  /* --- MONSTER SIDE --- */
+  #battle-panel {
+    width: 240px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  #monster-box {
+    background: #0e0e18;
+    border: 2px solid #2a2a3a;
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #monster-name {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    color: #ff6060;
+    text-align: center;
+  }
+
+  #monster-sprite {
+    font-size: 72px;
+    line-height: 1;
+    transition: transform 0.1s;
+    filter: drop-shadow(0 0 16px #ff606066);
+    user-select: none;
+  }
+  #monster-sprite.hit {
+    transform: translateX(8px) scale(1.1);
+    filter: drop-shadow(0 0 24px #ff6060cc) brightness(2);
+  }
+  #monster-sprite.dead {
+    filter: grayscale(1) opacity(0.4);
+    transform: rotate(90deg) scale(0.8);
+  }
+
+  #hp-bar-wrap {
+    width: 100%;
+  }
+  #hp-label {
+    font-size: 10px;
+    color: #ff6060;
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+  }
+  #hp-bar-bg {
+    background: #1a0a0a;
+    border-radius: 4px;
+    height: 12px;
+    overflow: hidden;
+    border: 1px solid #3a1a1a;
+  }
+  #hp-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #ff3030, #ff6060);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+
+  #damage-flash {
+    position: absolute;
+    inset: 0;
+    background: #ff000033;
+    opacity: 0;
+    pointer-events: none;
+    border-radius: 6px;
+    transition: opacity 0.15s;
+  }
+
+  /* --- INSTRUCTIONS / STATS --- */
+  #info-box {
+    background: #0e0e18;
+    border: 2px solid #2a2a3a;
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 11px;
+    line-height: 1.7;
+    color: #aaa;
+  }
+  #info-box b { color: #f0c040; font-weight: 600; }
+
+  #stat-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-size: 10px;
+  }
+  .stat { text-align: center; }
+  .stat-val { font-family: 'Press Start 2P', monospace; font-size: 12px; color: #c080ff; display: block; }
+  .stat-lbl { color: #666; font-size: 9px; }
+
+  /* --- RESULT OVERLAY --- */
+  #result-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #000000cc;
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+  }
+  #result-overlay.show { display: flex; }
+
+  #result-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 22px;
+    text-align: center;
+  }
+  .win-title { color: #f0c040; text-shadow: 0 0 30px #f0c040; }
+  .lose-title { color: #ff4040; text-shadow: 0 0 30px #ff4040; }
+
+  #result-msg { color: #aaa; font-size: 14px; text-align: center; }
+
+  #next-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    background: #f0c040;
+    color: #0a0a0f;
+    border: none;
+    padding: 14px 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+  #next-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px #f0c04066;
+  }
+
+  /* --- COMBO POPUP --- */
+  #combo-popup {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+    color: #fff;
+    text-shadow: 0 0 20px #c080ff;
+    pointer-events: none;
+    transition: transform 0.15s, opacity 0.3s;
+    opacity: 0;
+    white-space: nowrap;
+    z-index: 10;
+  }
+  #combo-popup.pop {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+
+  /* --- START SCREEN --- */
+  #start-screen {
+    position: fixed;
+    inset: 0;
+    background: #0a0a0f;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+  }
+
+  #start-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 18px;
+    color: #f0c040;
+    text-shadow: 0 0 30px #f0c04099;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  #start-sub {
+    color: #888;
+    font-size: 13px;
+    text-align: center;
+    max-width: 360px;
+    line-height: 1.7;
+  }
+
+  #start-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 12px;
+    background: transparent;
+    color: #f0c040;
+    border: 2px solid #f0c040;
+    padding: 14px 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+  }
+  #start-btn:hover {
+    background: #f0c040;
+    color: #0a0a0f;
+    box-shadow: 0 0 20px #f0c04066;
+  }
+
+  #loading-text { color: #666; font-size: 11px; font-family: 'Press Start 2P', monospace; display: none; }
+</style>
+</head>
+<body>
+
+<!-- START SCREEN -->
+<div id="start-screen">
+  <div id="start-title">🤸 HANDSTAND<br>FIGHTER</div>
+  <div id="start-sub">
+    Встань на руки и отжимайся, чтобы наносить урон монстрам.<br><br>
+    Нужна камера. Расположи её сбоку так, чтобы было видно всё тело.
+  </div>
+  <button id="start-btn" onclick="startGame()">▶ НАЧАТЬ</button>
+  <div id="loading-text">Загрузка...</div>
+</div>
+
+<div id="title">⚔ HANDSTAND FIGHTER</div>
+
+<div id="arena">
+
+  <!-- CAMERA -->
+  <div id="cam-panel">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="pose-canvas"></canvas>
+
+    <div id="status-bar">
+      <span class="status-pill pill-waiting" id="status-pill">⏳ ожидание</span>
+      <span id="reps-badge">×0</span>
+    </div>
+
+    <div id="combo-popup">УРОН!</div>
+  </div>
+
+  <!-- BATTLE -->
+  <div id="battle-panel">
+    <div id="monster-box">
+      <div id="damage-flash"></div>
+      <div id="monster-name">ГОБЛИН</div>
+      <div id="monster-sprite">👺</div>
+      <div id="hp-bar-wrap">
+        <div id="hp-label">
+          <span>HP</span>
+          <span id="hp-text">10 / 10</span>
+        </div>
+        <div id="hp-bar-bg"><div id="hp-bar" style="width:100%"></div></div>
+      </div>
+    </div>
+
+    <div id="info-box">
+      <b>Как играть:</b><br>
+      1. Встань на руки перед камерой<br>
+      2. Отожмись в стойке<br>
+      3. Каждый раз = урон монстру<br>
+      4. Упал до победы = проигрыш
+      <div id="stat-row">
+        <div class="stat">
+          <span class="stat-val" id="stat-kills">0</span>
+          <span class="stat-lbl">убито</span>
+        </div>
+        <div class="stat">
+          <span class="stat-val" id="stat-total">0</span>
+          <span class="stat-lbl">отжиманий</span>
+        </div>
+        <div class="stat">
+          <span class="stat-val" id="stat-wave">1</span>
+          <span class="stat-lbl">волна</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- RESULT OVERLAY -->
+<div id="result-overlay">
+  <div id="result-title" class="win-title">ПОБЕДА!</div>
+  <div id="result-msg">Следующий монстр ждёт...</div>
+  <button id="next-btn" onclick="nextMonster()">ДАЛЬШЕ ▶</button>
+</div>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
+<script>
+// ===================== MONSTERS =====================
+const MONSTERS = [
+  { name: 'ГОБЛИН',       emoji: '👺', hp: 5 },
+  { name: 'ОРЁЛ',         emoji: '🦅', hp: 8 },
+  { name: 'ДРАКОН',       emoji: '🐉', hp: 12 },
+  { name: 'СКЕЛЕТ',       emoji: '💀', hp: 7 },
+  { name: 'ЦИКЛОП',       emoji: '👁️',  hp: 10 },
+  { name: 'ДЕМОН',        emoji: '😈', hp: 15 },
+  { name: 'ВОЛК',         emoji: '🐺', hp: 6 },
+  { name: 'БОСС-ГОРИЛЛА', emoji: '🦍', hp: 20 },
+];
+
+// ===================== STATE =====================
+let monsterIndex = 0;
+let currentHP = 0;
+let maxHP = 0;
+let kills = 0;
+let totalReps = 0;
+let wave = 1;
+
+let isHandstand = false;
+let handstandStartTime = null;
+const HANDSTAND_CONFIRM_MS = 800; // время удержания для подтверждения стойки
+
+let elbowAngle = 180;
+let prevElbowAngle = 180;
+let repPhase = 'top'; // 'top' | 'bottom'
+const REP_DOWN_ANGLE = 120;
+const REP_UP_ANGLE  = 155;
+
+let gameActive = false;
+
+// ===================== DOM =====================
+const statusPill = document.getElementById('status-pill');
+const repsBadge  = document.getElementById('reps-badge');
+const monsterName   = document.getElementById('monster-name');
+const monsterSprite = document.getElementById('monster-sprite');
+const hpBar    = document.getElementById('hp-bar');
+const hpText   = document.getElementById('hp-text');
+const damageFlash = document.getElementById('damage-flash');
+const comboPopup  = document.getElementById('combo-popup');
+const resultOverlay = document.getElementById('result-overlay');
+const resultTitle   = document.getElementById('result-title');
+const resultMsg     = document.getElementById('result-msg');
+const statKills = document.getElementById('stat-kills');
+const statTotal = document.getElementById('stat-total');
+const statWave  = document.getElementById('stat-wave');
+
+function loadMonster(idx) {
+  const m = MONSTERS[idx % MONSTERS.length];
+  maxHP = m.hp + Math.floor(wave * 1.5);
+  currentHP = maxHP;
+  monsterName.textContent = m.name + (wave > 1 ? ` LV${wave}` : '');
+  monsterSprite.textContent = m.emoji;
+  monsterSprite.classList.remove('hit', 'dead');
+  updateHP();
+  repPhase = 'top';
+}
+
+function updateHP() {
+  const pct = Math.max(0, currentHP / maxHP * 100);
+  hpBar.style.width = pct + '%';
+  hpText.textContent = `${Math.max(0, currentHP)} / ${maxHP}`;
+  hpBar.style.background = pct > 50
+    ? 'linear-gradient(90deg,#ff3030,#ff6060)'
+    : pct > 25
+      ? 'linear-gradient(90deg,#ff8030,#ffaa60)'
+      : 'linear-gradient(90deg,#ffcc00,#ffee60)';
+}
+
+function dealDamage() {
+  currentHP--;
+  totalReps++;
+  statTotal.textContent = totalReps;
+  repsBadge.textContent = `×${totalReps}`;
+  updateHP();
+
+  // hit flash
+  monsterSprite.classList.add('hit');
+  damageFlash.style.opacity = '1';
+  setTimeout(() => {
+    monsterSprite.classList.remove('hit');
+    damageFlash.style.opacity = '0';
+  }, 150);
+
+  // combo popup
+  comboPopup.textContent = `-${1} HP!`;
+  comboPopup.classList.add('pop');
+  setTimeout(() => comboPopup.classList.remove('pop'), 400);
+
+  if (currentHP <= 0) {
+    monsterDead();
+  }
+}
+
+function monsterDead() {
+  kills++;
+  statKills.textContent = kills;
+  monsterSprite.classList.add('dead');
+
+  resultTitle.textContent = '🏆 ПОБЕДА!';
+  resultTitle.className = 'win-title';
+  resultMsg.textContent = `Монстр ${MONSTERS[monsterIndex % MONSTERS.length].name} повержен!\nВсего отжиманий: ${totalReps}`;
+  document.getElementById('next-btn').textContent = 'СЛЕДУЮЩИЙ МОНСТР ▶';
+  resultOverlay.classList.add('show');
+  gameActive = false;
+}
+
+function playerLose() {
+  resultTitle.textContent = '💀 ПОРАЖЕНИЕ';
+  resultTitle.className = 'lose-title';
+  resultMsg.textContent = `Ты упал со стойки! Монстр победил.\nОтжиманий: ${totalReps}`;
+  document.getElementById('next-btn').textContent = 'ПОПРОБОВАТЬ СНОВА ▶';
+  resultOverlay.classList.add('show');
+  gameActive = false;
+}
+
+function nextMonster() {
+  resultOverlay.classList.remove('show');
+  monsterIndex++;
+  if (monsterIndex > 0 && monsterIndex % MONSTERS.length === 0) wave++;
+  statWave.textContent = wave;
+  loadMonster(monsterIndex);
+  isHandstand = false;
+  handstandStartTime = null;
+  repPhase = 'top';
+  gameActive = true;
+  setStatus('waiting');
+}
+
+// ===================== STATUS =====================
+function setStatus(s) {
+  statusPill.className = 'status-pill';
+  if (s === 'waiting') {
+    statusPill.classList.add('pill-waiting');
+    statusPill.textContent = '⏳ встань на руки';
+  } else if (s === 'detecting') {
+    statusPill.classList.add('pill-detecting');
+    statusPill.textContent = '✅ тело найдено';
+  } else if (s === 'handstand') {
+    statusPill.classList.add('pill-handstand');
+    statusPill.textContent = '🤸 СТОЙКА!';
+  } else if (s === 'pushup') {
+    statusPill.classList.add('pill-pushup');
+    statusPill.textContent = '💪 ОТЖИМАЙСЯ!';
+  }
+}
+
+// ===================== GEOMETRY =====================
+function angle3(a, b, c) {
+  const ab = { x: a.x - b.x, y: a.y - b.y };
+  const cb = { x: c.x - b.x, y: c.y - b.y };
+  const dot = ab.x * cb.x + ab.y * cb.y;
+  const mag = Math.sqrt((ab.x**2 + ab.y**2) * (cb.x**2 + cb.y**2));
+  if (mag === 0) return 180;
+  return Math.acos(Math.min(1, Math.max(-1, dot / mag))) * 180 / Math.PI;
+}
+
+// ===================== MEDIAPIPE =====================
+const video  = document.getElementById('video');
+const canvas = document.getElementById('pose-canvas');
+const ctx    = canvas.getContext('2d');
+
+function startGame() {
+  document.getElementById('start-btn').style.display = 'none';
+  document.getElementById('loading-text').style.display = 'block';
+
+  loadMonster(monsterIndex);
+  gameActive = true;
+
+  const pose = new Pose({
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}`
+  });
+  pose.setOptions({
+    modelComplexity: 1,
+    smoothLandmarks: true,
+    enableSegmentation: false,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  });
+  pose.onResults(onResults);
+
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+    .then(stream => {
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        canvas.width  = video.videoWidth;
+        canvas.height = video.videoHeight;
+        document.getElementById('start-screen').style.display = 'none';
+
+        const camera = new Camera(video, {
+          onFrame: async () => { await pose.send({ image: video }); },
+          width: video.videoWidth,
+          height: video.videoHeight,
+        });
+        camera.start();
+      };
+    })
+    .catch(err => {
+      document.getElementById('loading-text').textContent = '❌ Нет доступа к камере';
+      console.error(err);
+    });
+}
+
+function onResults(results) {
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+
+  ctx.save();
+  // Mirror
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+  // Dark overlay
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (!results.poseLandmarks) {
+    ctx.restore();
+    if (gameActive) setStatus('waiting');
+    return;
+  }
+
+  const lm = results.poseLandmarks;
+
+  // Draw skeleton
+  drawConnectors(ctx, lm, POSE_CONNECTIONS, { color: '#c080ff44', lineWidth: 2 });
+  drawLandmarks(ctx, lm, { color: '#c080ff', lineWidth: 1, radius: 3 });
+
+  ctx.restore();
+
+  if (!gameActive) return;
+
+  // Key landmarks (all in normalized 0..1 space)
+  const nose    = lm[0];
+  const lShoulder = lm[11], rShoulder = lm[12];
+  const lElbow  = lm[13],   rElbow    = lm[14];
+  const lWrist  = lm[15],   rWrist    = lm[16];
+  const lHip    = lm[23],   rHip      = lm[24];
+  const lAnkle  = lm[27],   rAnkle    = lm[28];
+
+  // --- Detect handstand ---
+  // In handstand: wrists are near bottom of frame, ankles near top
+  // i.e. wrist.y > 0.6 and ankle.y < 0.4 (y=0 top, y=1 bottom in MediaPipe)
+  const wristY  = (lWrist.y  + rWrist.y)  / 2;
+  const ankleY  = (lAnkle.y  + rAnkle.y)  / 2;
+  const hipY    = (lHip.y    + rHip.y)    / 2;
+  const shoulderY = (lShoulder.y + rShoulder.y) / 2;
+
+  const bodyInverted = ankleY < shoulderY && wristY > hipY;
+
+  if (bodyInverted) {
+    if (!handstandStartTime) handstandStartTime = Date.now();
+    const held = Date.now() - handstandStartTime;
+    if (held > HANDSTAND_CONFIRM_MS) {
+      isHandstand = true;
+      setStatus('handstand');
+    } else {
+      setStatus('detecting');
+    }
+  } else {
+    if (isHandstand) {
+      // Was in handstand, now not → lose
+      playerLose();
+    }
+    isHandstand = false;
+    handstandStartTime = null;
+    setStatus('detecting');
+  }
+
+  // --- Detect pushup reps in handstand ---
+  if (isHandstand) {
+    setStatus('pushup');
+    // Elbow angle (left side)
+    const ea = angle3(lShoulder, lElbow, lWrist);
+    elbowAngle = ea;
+
+    // Rep logic: down when angle < REP_DOWN_ANGLE, up when > REP_UP_ANGLE
+    if (repPhase === 'top' && elbowAngle < REP_DOWN_ANGLE) {
+      repPhase = 'bottom';
+    } else if (repPhase === 'bottom' && elbowAngle > REP_UP_ANGLE) {
+      repPhase = 'top';
+      dealDamage(); // ← REP COMPLETE
+    }
+
+    // Draw elbow angle on canvas
+    ctx.save();
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    const ex = lElbow.x * canvas.width;
+    const ey = lElbow.y * canvas.height;
+    ctx.fillStyle = elbowAngle < REP_DOWN_ANGLE ? '#c080ff' : '#f0c040';
+    ctx.font = 'bold 18px Inter';
+    ctx.fillText(Math.round(elbowAngle) + '°', ex + 10, ey);
+    ctx.restore();
+  }
+}
+</script>
+</body>
+</html>
