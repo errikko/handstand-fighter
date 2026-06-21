@@ -50,27 +50,34 @@
   #hud-top-row {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 10px;
   }
 
   #session-hud {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
     background: rgba(0,0,0,0.65);
     border: 1px solid #c080ff44;
     border-radius: 12px;
-    padding: 12px 16px;
+    padding: 10px 16px;
     backdrop-filter: blur(6px);
-    flex: 1;
-    min-width: 0;
+    width: fit-content;
   }
 
   #session-mode-label {
     font-family: 'Press Start 2P', monospace;
     font-size: 9px;
     color: #c080ff;
+    letter-spacing: 1px;
+  }
+
+  #session-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
   }
 
   #session-value {
@@ -78,6 +85,12 @@
     font-size: 28px;
     color: #fff;
     text-shadow: 0 0 16px #c080ff88;
+    line-height: 1;
+  }
+
+  #session-unit {
+    font-size: 11px;
+    color: #888;
   }
 
   #kebab-btn {
@@ -633,9 +646,10 @@
   <div id="hud-top">
     <div id="hud-top-row">
       <div id="session-hud">
-        <div>
-          <div id="session-mode-label"></div>
-          <div id="session-value">0</div>
+        <div id="session-mode-label"></div>
+        <div id="session-value-row">
+          <span id="session-value">0</span>
+          <span id="session-unit"></span>
         </div>
       </div>
       <button id="kebab-btn" onclick="openIngameMenu()">⋮</button>
@@ -882,7 +896,9 @@ const STRINGS = {
     statusReps: 'ОТЖИМАЙСЯ!',
     statusHold: 'ДЕРЖИСЬ!',
     sessionLabelReps: 'ОТЖИМАНИЯ',
-    sessionLabelHold: 'СТОЙКА, СЕК',
+    sessionLabelHold: 'СТОЙКА',
+    sessionUnitReps: '',
+    sessionUnitHold: 'сек',
     statRecord: 'рекорд',
     statPoints: 'очки',
     statRank: 'ранг',
@@ -936,7 +952,9 @@ const STRINGS = {
     statusReps: 'PUSH-UPS!',
     statusHold: 'HOLD!',
     sessionLabelReps: 'PUSH-UPS',
-    sessionLabelHold: 'HOLD, SEC',
+    sessionLabelHold: 'HOLD',
+    sessionUnitReps: '',
+    sessionUnitHold: 'sec',
     statRecord: 'record',
     statPoints: 'points',
     statRank: 'rank',
@@ -1006,22 +1024,6 @@ const video  = $('video');
 const canvas = $('pose-canvas');
 const ctx    = canvas.getContext('2d');
 const ingameMenuOverlay = $('ingame-menu-overlay');
-
-// ===================== VOICE =====================
-function speak(text) {
-  if (!window.speechSynthesis) return;
-  try {
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = LANG === 'ru' ? 'ru-RU' : 'en-US';
-    u.rate = 1.15;
-    speechSynthesis.cancel();
-    speechSynthesis.speak(u);
-  } catch (e) { /* speech synthesis unsupported — silently ignore */ }
-}
-function unlockVoice() {
-  if (!window.speechSynthesis) return;
-  try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch (e) {}
-}
 
 // ===================== NAVIGATION =====================
 const OVERLAY_SCREENS = ['nickname-screen', 'menu-screen', 'mode-screen', 'instr-screen', 'profile-screen'];
@@ -1150,7 +1152,6 @@ function onNicknameConfirm() {
 // ===================== MODE / SESSION =====================
 function selectMode(mode) {
   sessionMode = mode;
-  unlockVoice();
   goPlay();
 }
 
@@ -1163,6 +1164,7 @@ function resetSessionCounters() {
   repPhase = 'top';
   sessionValueEl.textContent = '0';
   sessionModeLabelEl.textContent = sessionMode === 'reps' ? t('sessionLabelReps') : t('sessionLabelHold');
+  $('session-unit').textContent = sessionMode === 'reps' ? t('sessionUnitReps') : t('sessionUnitHold');
   refreshHudStats();
 }
 
@@ -1186,8 +1188,6 @@ function onRep() {
   repPopup.textContent = '+1';
   repPopup.classList.add('pop');
   setTimeout(() => repPopup.classList.remove('pop'), 400);
-
-  speak(String(sessionReps));
 }
 
 function finalizeSession() {
@@ -1228,7 +1228,6 @@ function showResult(value, isNewRecord, rankedUpTo) {
   recordBadge.classList.toggle('show', isNewRecord);
   if (isNewRecord) {
     recordBadge.innerHTML = pixelIcon('star', 16) + t('newRecord');
-    speak(t('newRecord'));
   }
 
   const rankupBadge = $('result-rankup-badge');
@@ -1498,6 +1497,7 @@ function applyLanguage(lang) {
 
   if (cameraStarted) {
     sessionModeLabelEl.textContent = sessionMode === 'reps' ? t('sessionLabelReps') : t('sessionLabelHold');
+    $('session-unit').textContent = sessionMode === 'reps' ? t('sessionUnitReps') : t('sessionUnitHold');
     refreshHudStats();
     setStatus(lastStatus);
   }
