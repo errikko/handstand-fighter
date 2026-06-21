@@ -53,17 +53,31 @@
     gap: 10px;
   }
 
-  #monster-hud {
+  #session-hud {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 10px;
     background: rgba(0,0,0,0.65);
-    border: 1px solid #ff606044;
+    border: 1px solid #c080ff44;
     border-radius: 12px;
-    padding: 10px 14px;
+    padding: 12px 16px;
     backdrop-filter: blur(6px);
     flex: 1;
     min-width: 0;
+  }
+
+  #session-mode-label {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    color: #c080ff;
+  }
+
+  #session-value {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 28px;
+    color: #fff;
+    text-shadow: 0 0 16px #c080ff88;
   }
 
   #kebab-btn {
@@ -81,51 +95,25 @@
   }
   #kebab-btn:active { transform: scale(0.94); }
 
-  #monster-sprite-hud {
-    width: 44px;
-    height: 44px;
-    transition: transform 0.1s, filter 0.1s;
-    filter: drop-shadow(0 0 10px #ff606066);
-    flex-shrink: 0;
+  .lang-toggle {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    display: flex;
+    gap: 6px;
+    z-index: 5;
   }
-  #monster-sprite-hud.hit {
-    transform: scale(1.2);
-    filter: drop-shadow(0 0 20px #ff6060) brightness(2);
-  }
-  #monster-sprite-hud.dead {
-    filter: grayscale(1) opacity(0.4);
-    transform: rotate(20deg) scale(0.8);
-  }
-
-  #monster-info { flex: 1; min-width: 0; }
-
-  #monster-name-hud {
+  .lang-btn {
     font-family: 'Press Start 2P', monospace;
     font-size: 9px;
-    color: #ff6060;
-    margin-bottom: 6px;
-  }
-
-  #hp-bar-bg {
-    background: rgba(60,10,10,0.8);
+    background: rgba(255,255,255,0.08);
+    color: #888;
+    border: 1px solid #ffffff22;
     border-radius: 6px;
-    height: 14px;
-    overflow: hidden;
-    border: 1px solid #ff303066;
+    padding: 6px 8px;
+    cursor: pointer;
   }
-  #hp-bar {
-    height: 100%;
-    background: linear-gradient(90deg, #ff3030, #ff7070);
-    border-radius: 6px;
-    transition: width 0.3s ease;
-  }
-  #hp-text {
-    font-size: 10px;
-    color: #ff9090;
-    margin-top: 3px;
-    text-align: right;
-    font-weight: 600;
-  }
+  .lang-btn.active { background: #f0c040; color: #0a0a0f; border-color: #f0c040; }
 
   #status-pill {
     font-size: 10px;
@@ -138,7 +126,7 @@
   .pill-waiting  { background: rgba(40,40,60,0.85); color: #888; border: 1px solid #333; }
   .pill-detecting{ background: rgba(10,40,10,0.85); color: #4caf50; border: 1px solid #4caf5066; }
   .pill-handstand{ background: rgba(60,40,0,0.85);  color: #f0c040; border: 1px solid #f0c04066; }
-  .pill-pushup   { background: rgba(40,0,80,0.85);  color: #c080ff; border: 1px solid #c080ff66; }
+  .pill-active   { background: rgba(40,0,80,0.85);  color: #c080ff; border: 1px solid #c080ff66; }
 
   /* ===== HUD BOTTOM ===== */
   #hud-bottom {
@@ -168,19 +156,19 @@
   }
   .hud-stat-lbl { font-size: 9px; color: #888; margin-top: 2px; display: block; }
 
-  /* ===== DAMAGE FLASH ===== */
+  /* ===== REP/HOLD FLASH ===== */
   #screen-flash {
     position: absolute;
     inset: 0;
-    background: #ff000044;
+    background: #c080ff33;
     opacity: 0;
     pointer-events: none;
     z-index: 5;
     transition: opacity 0.12s;
   }
 
-  /* ===== DAMAGE POPUP ===== */
-  #dmg-popup {
+  /* ===== REP POPUP ===== */
+  #rep-popup {
     position: absolute;
     top: 38%;
     left: 50%;
@@ -188,14 +176,14 @@
     font-family: 'Press Start 2P', monospace;
     font-size: 22px;
     color: #fff;
-    text-shadow: 0 0 20px #ff6060, 0 2px 0 #000;
+    text-shadow: 0 0 20px #c080ff, 0 2px 0 #000;
     pointer-events: none;
     z-index: 20;
     opacity: 0;
     transition: transform 0.12s, opacity 0.3s;
     white-space: nowrap;
   }
-  #dmg-popup.pop {
+  #rep-popup.pop {
     transform: translateX(-50%) scale(1);
     opacity: 1;
   }
@@ -245,17 +233,41 @@
     align-items: center;
     justify-content: center;
     gap: 20px;
+    padding: 24px;
+    text-align: center;
   }
   #result-overlay.show { display: flex; }
 
   #result-title {
     font-family: 'Press Start 2P', monospace;
-    font-size: 24px;
+    font-size: 18px;
     text-align: center;
     line-height: 1.5;
+    color: #c080ff;
   }
-  .win-title  { color: #f0c040; text-shadow: 0 0 40px #f0c040; }
-  .lose-title { color: #ff4040; text-shadow: 0 0 40px #ff4040; }
+
+  #result-value {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 48px;
+    color: #fff;
+    text-shadow: 0 0 30px #c080ff;
+  }
+
+  #result-record-badge {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 12px;
+    color: #f0c040;
+    text-shadow: 0 0 20px #f0c040;
+    display: none;
+  }
+  #result-record-badge.show { display: block; }
+
+  #result-rankup-badge {
+    font-size: 12px;
+    color: #c080ff;
+    display: none;
+  }
+  #result-rankup-badge.show { display: flex; align-items: center; gap: 8px; }
 
   #result-stats {
     background: rgba(255,255,255,0.05);
@@ -403,14 +415,49 @@
     word-break: break-word;
   }
 
-  #profile-stats {
+  #rank-card {
+    width: 100%;
+    max-width: 340px;
     background: rgba(255,255,255,0.05);
     border: 1px solid #ffffff22;
     border-radius: 12px;
-    padding: 16px 20px;
+    padding: 18px;
     display: flex;
-    gap: 28px;
-    margin-bottom: 24px;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  #rank-icon { width: 48px; height: 48px; flex-shrink: 0; }
+  #rank-icon.legend-glow {
+    animation: legend-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes legend-pulse {
+    0%, 100% { filter: drop-shadow(0 0 6px #c080ff); }
+    50%      { filter: drop-shadow(0 0 18px #ff6090) brightness(1.2); }
+  }
+  #rank-info { flex: 1; min-width: 0; }
+  #rank-label {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 13px;
+    color: #f0c040;
+    margin-bottom: 8px;
+  }
+  #rank-progress-bg {
+    background: rgba(255,255,255,0.08);
+    border-radius: 6px;
+    height: 10px;
+    overflow: hidden;
+  }
+  #rank-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #c080ff, #ff6090);
+    border-radius: 6px;
+    transition: width 0.3s ease;
+  }
+  #rank-progress-text {
+    font-size: 10px;
+    color: #888;
+    margin-top: 6px;
   }
 
   .profile-section-title {
@@ -423,7 +470,7 @@
     margin-top: 6px;
   }
 
-  #profile-monsters {
+  #profile-badges {
     width: 100%;
     max-width: 340px;
     display: flex;
@@ -431,19 +478,18 @@
     gap: 8px;
     margin-bottom: 20px;
   }
-  .pm-row {
+  .badge-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     background: #0e0e18;
     border: 1px solid #2a2a3a;
     border-radius: 8px;
-    padding: 8px 14px;
+    padding: 10px 14px;
   }
-  .pm-row.locked { opacity: 0.35; }
-  .pm-icon { width: 24px; height: 24px; margin-right: 10px; flex-shrink: 0; }
-  .pm-name { flex: 1; font-size: 12px; }
-  .pm-count { font-family: 'Press Start 2P', monospace; font-size: 11px; color: #c080ff; }
+  .badge-row.empty { opacity: 0.4; }
+  .badge-label { font-size: 12px; color: #ccc; }
+  .badge-value { font-family: 'Press Start 2P', monospace; font-size: 13px; color: #f0c040; }
 
   #profile-achievements {
     width: 100%;
@@ -495,71 +541,86 @@
 
 <!-- NICKNAME SCREEN -->
 <div id="nickname-screen" class="menu-screen">
+  <div class="lang-toggle">
+    <button class="lang-btn" data-lang="ru" onclick="applyLanguage('ru')">RU</button>
+    <button class="lang-btn" data-lang="en" onclick="applyLanguage('en')">EN</button>
+  </div>
   <div class="screen-logo">HANDSTAND FIGHTER</div>
-  <div id="nickname-hint">Придумай ник игрока — под ним будет сохраняться твой прогресс на этом устройстве.</div>
-  <input id="nickname-input" type="text" placeholder="Твой ник" maxlength="20">
-  <button class="big-btn" onclick="onNicknameConfirm()">ПРОДОЛЖИТЬ</button>
+  <div id="nickname-hint"></div>
+  <input id="nickname-input" type="text" maxlength="20">
+  <button class="big-btn" id="nickname-confirm-btn" onclick="onNicknameConfirm()"></button>
 </div>
 
 <!-- MAIN MENU -->
 <div id="menu-screen" class="menu-screen">
+  <div class="lang-toggle">
+    <button class="lang-btn" data-lang="ru" onclick="applyLanguage('ru')">RU</button>
+    <button class="lang-btn" data-lang="en" onclick="applyLanguage('en')">EN</button>
+  </div>
   <div class="screen-logo">HANDSTAND FIGHTER</div>
-  <button class="big-btn" onclick="goPlay()">ИГРАТЬ</button>
-  <button class="big-btn secondary" onclick="openProfile('menu')">ПРОФИЛЬ</button>
-  <button class="big-btn secondary" onclick="openInstructions('menu')">ИНСТРУКЦИЯ</button>
+  <button class="big-btn" id="menu-play-btn" onclick="showOverlayScreen('mode-screen')"></button>
+  <button class="big-btn secondary" id="menu-profile-btn" onclick="openProfile('menu')"></button>
+  <button class="big-btn secondary" id="menu-instr-btn" onclick="openInstructions('menu')"></button>
+</div>
+
+<!-- MODE SELECT -->
+<div id="mode-screen" class="menu-screen">
+  <div class="screen-title" id="mode-title"></div>
+  <button class="big-btn" id="mode-reps-btn" onclick="selectMode('reps')"></button>
+  <button class="big-btn" id="mode-hold-btn" onclick="selectMode('hold')"></button>
+  <button class="big-btn secondary" id="mode-back-btn" onclick="showOverlayScreen('menu-screen')"></button>
 </div>
 
 <!-- INSTRUCTION SCREEN -->
 <div id="instr-screen" class="menu-screen">
-  <div class="screen-title">КАК ИГРАТЬ</div>
+  <div class="screen-title" id="instr-title"></div>
 
   <div class="instr-step">
     <span class="instr-num">1</span>
-    <span class="instr-text">Нажми <b>"Играть"</b> — появится таймер 5 секунд. За это время поставь телефон и займи позицию.</span>
+    <span class="instr-text" id="instr-step-1"></span>
   </div>
   <div class="instr-step">
     <span class="instr-num">2</span>
-    <span class="instr-text">Поставь телефон <b>сбоку</b> на высоте ~1 метра, чтобы в кадре было всё тело.</span>
+    <span class="instr-text" id="instr-step-2"></span>
   </div>
   <div class="instr-step">
     <span class="instr-num">3</span>
-    <span class="instr-text"><b>Встань на руки</b>. Игра определит стойку автоматически.</span>
+    <span class="instr-text" id="instr-step-3"></span>
   </div>
   <div class="instr-step">
     <span class="instr-num">4</span>
-    <span class="instr-text"><b>Отжимайся в стойке</b> — каждое отжимание наносит урон монстру.</span>
+    <span class="instr-text" id="instr-step-4"></span>
   </div>
   <div class="instr-step">
     <span class="instr-num">5</span>
-    <span class="instr-text">Если <b>встал на ноги</b> до победы — ты проиграл монстру!</span>
+    <span class="instr-text" id="instr-step-5"></span>
   </div>
 
-  <button class="big-btn" id="instr-back-btn" onclick="closeOverlayScreen()">НАЗАД</button>
-  <div id="loading-msg">Запускаем камеру...</div>
+  <button class="big-btn" id="instr-back-btn" onclick="closeOverlayScreen()"></button>
+  <div id="loading-msg"></div>
 </div>
 
 <!-- PROFILE SCREEN -->
 <div id="profile-screen" class="menu-screen">
-  <div class="screen-title">ПРОФИЛЬ</div>
+  <div class="screen-title" id="profile-title"></div>
   <div id="profile-name">Игрок</div>
-  <div id="profile-stats">
-    <div class="rs">
-      <span class="rs-val" id="profile-reps">0</span>
-      <span class="rs-lbl">отжиманий</span>
-    </div>
-    <div class="rs">
-      <span class="rs-val" id="profile-kills">0</span>
-      <span class="rs-lbl">убито</span>
+
+  <div id="rank-card">
+    <div id="rank-icon"></div>
+    <div id="rank-info">
+      <div id="rank-label"></div>
+      <div id="rank-progress-bg"><div id="rank-progress-bar" style="width:0%"></div></div>
+      <div id="rank-progress-text"></div>
     </div>
   </div>
 
-  <div class="profile-section-title">МОНСТРЫ</div>
-  <div id="profile-monsters"></div>
+  <div class="profile-section-title" id="profile-badges-title"></div>
+  <div id="profile-badges"></div>
 
-  <div class="profile-section-title">НАГРАДЫ</div>
+  <div class="profile-section-title" id="profile-achievements-title"></div>
   <div id="profile-achievements"></div>
 
-  <button class="big-btn" onclick="closeOverlayScreen()">НАЗАД</button>
+  <button class="big-btn" id="profile-back-btn" onclick="closeOverlayScreen()"></button>
 </div>
 
 <!-- GAME VIEW (fullscreen camera) -->
@@ -571,70 +632,69 @@
   <!-- TOP HUD -->
   <div id="hud-top">
     <div id="hud-top-row">
-      <div id="monster-hud">
-        <div id="monster-sprite-hud"></div>
-        <div id="monster-info">
-          <div id="monster-name-hud">ГОБЛИН</div>
-          <div id="hp-bar-bg"><div id="hp-bar" style="width:100%"></div></div>
-          <div id="hp-text">5 / 5</div>
+      <div id="session-hud">
+        <div>
+          <div id="session-mode-label"></div>
+          <div id="session-value">0</div>
         </div>
       </div>
       <button id="kebab-btn" onclick="openIngameMenu()">⋮</button>
     </div>
-    <span class="status-pill pill-waiting" id="status-pill">⏳ встань на руки</span>
+    <span class="status-pill pill-waiting" id="status-pill"></span>
   </div>
 
   <!-- BOTTOM HUD -->
   <div id="hud-bottom">
     <div class="hud-stat">
-      <span class="hud-stat-val" id="stat-kills">0</span>
-      <span class="hud-stat-lbl">убито</span>
+      <span class="hud-stat-val" id="stat-record">0</span>
+      <span class="hud-stat-lbl" id="stat-record-lbl"></span>
     </div>
     <div class="hud-stat">
-      <span class="hud-stat-val" id="stat-reps">0</span>
-      <span class="hud-stat-lbl">отжиманий</span>
+      <span class="hud-stat-val" id="stat-points">0</span>
+      <span class="hud-stat-lbl" id="stat-points-lbl"></span>
     </div>
     <div class="hud-stat">
-      <span class="hud-stat-val" id="stat-wave">1</span>
-      <span class="hud-stat-lbl">волна</span>
+      <span class="hud-stat-val" id="stat-rank">-</span>
+      <span class="hud-stat-lbl" id="stat-rank-lbl"></span>
     </div>
   </div>
 
-  <!-- DAMAGE POPUP -->
-  <div id="dmg-popup">-1 HP!</div>
+  <!-- REP POPUP -->
+  <div id="rep-popup">+1</div>
 </div>
 
 <!-- IN-GAME MENU -->
 <div id="ingame-menu-overlay">
   <div id="ingame-menu-box">
-    <button class="big-btn secondary" onclick="openProfile('game')">МОЙ ПРОФИЛЬ</button>
-    <button class="big-btn secondary" onclick="openInstructions('game')">КАК ИГРАТЬ</button>
-    <button class="big-btn secondary" onclick="goMainMenuFromGame()">ГЛАВНОЕ МЕНЮ</button>
-    <button class="big-btn" onclick="resumeFromIngameMenu()">ПРОДОЛЖИТЬ</button>
+    <button class="big-btn secondary" id="ingame-profile-btn" onclick="openProfile('game')"></button>
+    <button class="big-btn secondary" id="ingame-how-btn" onclick="openInstructions('game')"></button>
+    <button class="big-btn secondary" id="ingame-mainmenu-btn" onclick="goMainMenuFromGame()"></button>
+    <button class="big-btn" id="ingame-resume-btn" onclick="resumeFromIngameMenu()"></button>
   </div>
 </div>
 
 <!-- COUNTDOWN -->
 <div id="countdown-overlay">
-  <div id="countdown-msg">ПОСТАВЬ ТЕЛЕФОН СБОКУ<br>И ЗАНИМАЙ ПОЗИЦИЮ</div>
+  <div id="countdown-msg"></div>
   <div id="countdown-num">5</div>
-  <div id="countdown-sub">Игра начнётся автоматически</div>
+  <div id="countdown-sub"></div>
 </div>
 
 <!-- RESULT -->
 <div id="result-overlay">
-  <div id="result-title" class="win-title">ПОБЕДА!</div>
+  <div id="result-title"></div>
+  <div id="result-value">0</div>
   <div id="result-stats">
     <div class="rs">
-      <span class="rs-val" id="res-reps">0</span>
-      <span class="rs-lbl">отжиманий</span>
-    </div>
-    <div class="rs">
-      <span class="rs-val" id="res-kills">0</span>
-      <span class="rs-lbl">убито</span>
+      <span class="rs-val" id="res-value-lbl-val"></span>
     </div>
   </div>
-  <button id="next-btn" onclick="nextRound()">ДАЛЬШЕ ▶</button>
+  <div id="result-record-badge"></div>
+  <div id="result-rankup-badge">
+    <div id="result-rankup-icon" style="width:28px;height:28px;"></div>
+    <span id="result-rankup-text"></span>
+  </div>
+  <button id="next-btn" onclick="nextRound()"></button>
 </div>
 
 <!-- MediaPipe -->
@@ -643,142 +703,12 @@
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 
 <script>
-// ===================== MONSTERS =====================
-// Each monster is a hand-drawn 10x10 pixel-art grid. '.' is transparent;
-// every other character is a key into the monster's own palette.
-const MONSTERS = [
-  {
-    name: 'ПОДСНЕЖНИК', hp: 3,
-    palette: { '@': '#f5f5f5', 'o': '#757575', 's': '#66bb6a' },
-    grid: [
-      '..@....@..',
-      '.@@@..@@@.',
-      '@@@@@@@@@@',
-      '@@oo..oo@@',
-      '.@@@@@@@@.',
-      '..ssssss..',
-      '..ssssss..',
-      '..ssssss..',
-      '..ssssss..',
-      '...ssss...',
-    ],
-  },
-  {
-    name: 'БОГОМОЛ', hp: 6,
-    palette: { '@': '#7cb342', '#': '#33691e', 'o': '#1b5e20', 'w': '#aed581' },
-    grid: [
-      '...@@@@...',
-      '..@@@@@@..',
-      '.@o@@@@o@.',
-      '.@@@@@@@@.',
-      '..@@@@@@..',
-      'w.@@@@@@.w',
-      'ww@@@@@@ww',
-      '..@@@@@@..',
-      '..#@@@@#..',
-      '...####...',
-    ],
-  },
-  {
-    name: 'ЖУРАВЛЬ', hp: 8,
-    palette: { '@': '#fafafa', '#': '#bdbdbd', 'o': '#212121', 'r': '#e53935' },
-    grid: [
-      '....r.....',
-      '...@@@....',
-      '..@@@@@...',
-      '.@o@@@@@@.',
-      '@@@@@@@@@@',
-      '@@@@@@@@@@',
-      '.@@@@@@@@.',
-      '.#@@@@@@#.',
-      '..######..',
-      '....##....',
-    ],
-  },
-  {
-    name: 'ГАДЮКА', hp: 10,
-    palette: { '@': '#aed581', '#': '#558b2f', 'o': '#ffeb3b', 'w': '#ffffff' },
-    grid: [
-      '...@@@....',
-      '..@@@@@...',
-      '.@oo..oo@.',
-      '.@@wwww@@.',
-      '..@@@@@@..',
-      '.@@@@@@@@.',
-      '@@#@@@@#@@',
-      '.@@#@@#@@.',
-      '..@@@@@@..',
-      '...@@@@...',
-    ],
-  },
-  {
-    name: 'ОБЕЗЬЯНА', hp: 12,
-    palette: { '@': '#8d6e63', '#': '#4e342e', 'o': '#3e2723', 'w': '#d7ccc8' },
-    grid: [
-      'w........w',
-      'ww......ww',
-      '.@@@@@@@@.',
-      '@@wwwwww@@',
-      '@@oo..oo@@',
-      '@@.wwww.@@',
-      '.@@@@@@@@.',
-      '.#@@@@@@#.',
-      '..######..',
-      '..........',
-    ],
-  },
-  {
-    name: 'ТИГРИЦА', hp: 15,
-    palette: { '@': '#fb8c00', '#': '#212121', 'o': '#ffeb3b' },
-    grid: [
-      '.#......#.',
-      '##......##',
-      '.@@@@@@@@.',
-      '@@oo..oo@@',
-      '@@#@@@@#@@',
-      '@@@@##@@@@',
-      '.@@@@@@@@.',
-      '.#@@@@@@#.',
-      '..######..',
-      '..........',
-    ],
-  },
-  {
-    name: 'МАСТЕР ШИФУ', hp: 18,
-    palette: { '@': '#bf5b2e', '#': '#5d4037', 'w': '#fff3e0', 'o': '#212121', 'r': '#c62828' },
-    grid: [
-      '.w......w.',
-      'ww......ww',
-      '.@@@@@@@@.',
-      '@@wwwwww@@',
-      '@@oo..oo@@',
-      '.@@@@@@@@.',
-      '.r@@@@@@r.',
-      'rr@@@@@@rr',
-      '.rrrrrrrr.',
-      '..rrrrrr..',
-    ],
-  },
-  {
-    name: 'ТАЙ ЛУНГ', hp: 25,
-    palette: { '@': '#eceff1', '#': '#37474f', 'o': '#43a047' },
-    grid: [
-      '.#......#.',
-      '##......##',
-      '.@@@@@@@@.',
-      '@@oo..oo@@',
-      '@@#@@@@#@@',
-      '@@@@##@@@@',
-      '.@@@@@@@@.',
-      '.#@@@@@@#.',
-      '..######..',
-      '..........',
-    ],
-  },
-];
-
-function renderMonsterIcon(m, size) {
-  const grid = m.grid, palette = m.palette;
+// ===================== PIXEL ART RENDERER =====================
+// Generic renderer for any { grid, palette } pixel-art definition.
+// grid: array of equal-length strings, '.' = transparent, any other
+// char is a key into palette mapping to a CSS color.
+function renderPixelArt(def, size) {
+  const grid = def.grid, palette = def.palette;
   const cols = grid[0].length, rows = grid.length;
   const unit = size / cols;
   let rects = '';
@@ -786,11 +716,94 @@ function renderMonsterIcon(m, size) {
     for (let x = 0; x < cols; x++) {
       const c = grid[y][x];
       if (c === '.') continue;
-      const color = palette[c];
-      rects += `<rect x="${(x*unit).toFixed(2)}" y="${(y*unit).toFixed(2)}" width="${unit.toFixed(2)}" height="${unit.toFixed(2)}" fill="${color}"/>`;
+      rects += `<rect x="${(x*unit).toFixed(2)}" y="${(y*unit).toFixed(2)}" width="${unit.toFixed(2)}" height="${unit.toFixed(2)}" fill="${palette[c]}"/>`;
     }
   }
   return `<svg viewBox="0 0 ${size} ${size}" width="100%" height="100%" shape-rendering="crispEdges">${rects}</svg>`;
+}
+
+// ===================== RANKS =====================
+const RANKS = [
+  {
+    id: 'rookie', min: 0,
+    palette: { '@': '#757575' },
+    grid: [
+      '........',
+      '..####..',
+      '.######.',
+      '.######.',
+      '.######.',
+      '.######.',
+      '..####..',
+      '........',
+    ],
+  },
+  {
+    id: 'fighter', min: 50,
+    palette: { '@': '#42a5f5', '#': '#1565c0' },
+    grid: [
+      '..####..',
+      '.######.',
+      '.######.',
+      '.######.',
+      '.######.',
+      '..####..',
+      '...##...',
+      '...##...',
+    ],
+  },
+  {
+    id: 'warrior', min: 150,
+    palette: { '@': '#e0e0e0', '#': '#558b2f' },
+    grid: [
+      '...@@...',
+      '...@@...',
+      '...@@...',
+      '..####..',
+      '...@@...',
+      '...@@...',
+      '..####..',
+      '...##...',
+    ],
+  },
+  {
+    id: 'master', min: 400,
+    palette: { '@': '#ffd54f', '#': '#f9a825' },
+    grid: [
+      '...##...',
+      '..####..',
+      '########',
+      '.######.',
+      '##....##',
+      '#......#',
+      '.#....#.',
+      '..#..#..',
+    ],
+  },
+  {
+    id: 'legend', min: 800,
+    palette: { 'r': '#ff6090', 'f': '#c080ff' },
+    grid: [
+      'r..rr..r',
+      '.r.rr.r.',
+      '..ffff..',
+      '.ffffff.',
+      '.ffffff.',
+      '..ffff..',
+      '.r.rr.r.',
+      'r..rr..r',
+    ],
+  },
+];
+
+function getRank(points) {
+  let rank = RANKS[0];
+  for (const r of RANKS) { if (points >= r.min) rank = r; else break; }
+  return rank;
+}
+function getNextRank(rank) {
+  const idx = RANKS.findIndex(r => r.id === rank.id);
+  return RANKS[idx + 1] || null;
 }
 
 // ===================== PIXEL UI ICONS (replace emoji) =====================
@@ -822,7 +835,124 @@ function pixelIcon(key, size) {
 
 // ===================== ACHIEVEMENTS =====================
 const REP_MILESTONES  = [10, 50, 100, 250, 500, 1000];
-const KILL_MILESTONES = [5, 10, 25, 50, 100];
+const HOLD_MILESTONES = [10, 30, 60, 120, 300, 600];
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+// ===================== i18n =====================
+const STRINGS = {
+  ru: {
+    nicknameHint: 'Придумай ник игрока — под ним будет сохраняться твой прогресс на этом устройстве.',
+    nicknamePlaceholder: 'Твой ник',
+    btnContinue: 'ПРОДОЛЖИТЬ',
+    btnPlay: 'ИГРАТЬ',
+    btnProfile: 'ПРОФИЛЬ',
+    btnInstructions: 'ИНСТРУКЦИЯ',
+    btnBack: 'НАЗАД',
+    modeTitle: 'ВЫБЕРИ РЕЖИМ',
+    modeReps: 'ОТЖИМАНИЯ',
+    modeHold: 'СТОЙКА НА ВРЕМЯ',
+    instrTitle: 'КАК ИГРАТЬ',
+    instrSteps: [
+      'Выбери режим: <b>«Отжимания»</b> считает повторения, <b>«Стойка»</b> засекает время на руках.',
+      'Нажми <b>«Играть»</b> — появится таймер 5 секунд. За это время поставь телефон и займи позицию.',
+      'Поставь телефон <b>сбоку</b> на высоте ~1 метра, чтобы в кадре было всё тело.',
+      '<b>Встань на руки</b>. Игра определит стойку автоматически и начнёт считать.',
+      'Как только <b>встал на ноги</b> — подход завершается и результат сохраняется в профиль.',
+    ],
+    loadingCamera: 'Запускаем камеру...',
+    noCameraAccess: 'Нет доступа к камере',
+    profileTitle: 'ПРОФИЛЬ',
+    rankProgress: (pts, next) => next ? `${pts} / ${next.min} очков до следующего ранга` : `${pts} очков — максимальный ранг!`,
+    sectionBadges: 'РЕКОРДЫ ЗА МЕСЯЦ',
+    sectionAchievements: 'НАГРАДЫ',
+    badgeReps: 'Лучший подход (отжимания)',
+    badgeHold: 'Лучшая стойка (секунды)',
+    badgeEmpty: 'пока нет',
+    achReps: n => `${n} отжиманий всего`,
+    achHold: n => `${n} секунд в стойке всего`,
+    ingameProfile: 'МОЙ ПРОФИЛЬ',
+    ingameHow: 'КАК ИГРАТЬ',
+    ingameMainMenu: 'ГЛАВНОЕ МЕНЮ',
+    ingameResume: 'ПРОДОЛЖИТЬ',
+    countdownMsg: 'ПОСТАВЬ ТЕЛЕФОН СБОКУ<br>И ЗАНИМАЙ ПОЗИЦИЮ',
+    countdownSub: 'Игра начнётся автоматически',
+    statusWaiting: 'встань на руки',
+    statusDetecting: 'тело найдено',
+    statusHandstand: 'СТОЙКА!',
+    statusReps: 'ОТЖИМАЙСЯ!',
+    statusHold: 'ДЕРЖИСЬ!',
+    sessionLabelReps: 'ОТЖИМАНИЯ',
+    sessionLabelHold: 'СТОЙКА, СЕК',
+    statRecord: 'рекорд',
+    statPoints: 'очки',
+    statRank: 'ранг',
+    resultTitle: 'РЕЗУЛЬТАТ',
+    resultUnitReps: 'отжиманий',
+    resultUnitHold: 'секунд',
+    newRecord: 'НОВЫЙ РЕКОРД!',
+    rankUp: rank => `НОВЫЙ РАНГ: ${rank}`,
+    nextBtn: 'ЕЩЁ РАЗ ▶',
+    ranks: { rookie: 'НОВИЧОК', fighter: 'БОЕЦ', warrior: 'ВОИН', master: 'МАСТЕР', legend: 'ЛЕГЕНДА' },
+  },
+  en: {
+    nicknameHint: 'Pick a player nickname — your progress will be saved under it on this device.',
+    nicknamePlaceholder: 'Your nickname',
+    btnContinue: 'CONTINUE',
+    btnPlay: 'PLAY',
+    btnProfile: 'PROFILE',
+    btnInstructions: 'HOW TO PLAY',
+    btnBack: 'BACK',
+    modeTitle: 'CHOOSE A MODE',
+    modeReps: 'PUSH-UPS',
+    modeHold: 'TIMED HOLD',
+    instrTitle: 'HOW TO PLAY',
+    instrSteps: [
+      'Pick a mode: <b>"Push-ups"</b> counts reps, <b>"Hold"</b> times your handstand.',
+      'Tap <b>"Play"</b> — a 5 second timer starts. Use it to place your phone and get into position.',
+      'Place your phone <b>on its side</b>, about 1 meter up, so your whole body is in frame.',
+      '<b>Kick up into a handstand</b>. The game detects it automatically and starts counting.',
+      'As soon as you <b>come down</b> — the set ends and the result is saved to your profile.',
+    ],
+    loadingCamera: 'Starting camera...',
+    noCameraAccess: 'No camera access',
+    profileTitle: 'PROFILE',
+    rankProgress: (pts, next) => next ? `${pts} / ${next.min} points to next rank` : `${pts} points — max rank!`,
+    sectionBadges: 'THIS MONTH\'S BEST',
+    sectionAchievements: 'ACHIEVEMENTS',
+    badgeReps: 'Best set (push-ups)',
+    badgeHold: 'Best hold (seconds)',
+    badgeEmpty: 'none yet',
+    achReps: n => `${n} push-ups total`,
+    achHold: n => `${n} seconds held total`,
+    ingameProfile: 'MY PROFILE',
+    ingameHow: 'HOW TO PLAY',
+    ingameMainMenu: 'MAIN MENU',
+    ingameResume: 'RESUME',
+    countdownMsg: 'PUT YOUR PHONE ON ITS SIDE<br>AND GET INTO POSITION',
+    countdownSub: 'The game will start automatically',
+    statusWaiting: 'get into a handstand',
+    statusDetecting: 'body found',
+    statusHandstand: 'HANDSTAND!',
+    statusReps: 'PUSH-UPS!',
+    statusHold: 'HOLD!',
+    sessionLabelReps: 'PUSH-UPS',
+    sessionLabelHold: 'HOLD, SEC',
+    statRecord: 'record',
+    statPoints: 'points',
+    statRank: 'rank',
+    resultTitle: 'RESULT',
+    resultUnitReps: 'push-ups',
+    resultUnitHold: 'seconds',
+    newRecord: 'NEW RECORD!',
+    rankUp: rank => `NEW RANK: ${rank}`,
+    nextBtn: 'AGAIN ▶',
+    ranks: { rookie: 'ROOKIE', fighter: 'FIGHTER', warrior: 'WARRIOR', master: 'MASTER', legend: 'LEGEND' },
+  },
+};
+
+let LANG = localStorage.getItem('hf_lang') || 'ru';
+function t(key) { return STRINGS[LANG][key]; }
+function rankLabel(rank) { return STRINGS[LANG].ranks[rank.id]; }
 
 // ===================== PROFILE (persisted) =====================
 const PROFILE_KEY = 'hf_profile';
@@ -834,8 +964,9 @@ function loadProfile() {
     const p = JSON.parse(raw);
     if (!p.nickname) return null;
     p.totalReps = p.totalReps || 0;
-    p.totalKills = p.totalKills || 0;
-    p.killsByMonster = p.killsByMonster || {};
+    p.totalHoldSeconds = p.totalHoldSeconds || 0;
+    p.bestRepsSession = p.bestRepsSession || null;
+    p.bestHoldSession = p.bestHoldSession || null;
     return p;
   } catch (e) { return null; }
 }
@@ -847,8 +978,10 @@ function saveProfile() {
 let profile = loadProfile();
 
 // ===================== STATE =====================
-let monsterIndex = 0, currentHP = 0, maxHP = 0, currentMonster = MONSTERS[0];
-let kills = 0, totalReps = 0, wave = 1;
+let sessionMode = 'reps'; // 'reps' | 'hold'
+let sessionReps = 0;
+let sessionHoldSeconds = 0;
+let holdConfirmedAt = null;
 let isHandstand = false, handstandStartTime = null;
 const HANDSTAND_CONFIRM_MS = 1000;
 let repPhase = 'top';
@@ -861,11 +994,10 @@ let pausedGameActive = false;
 // ===================== DOM =====================
 const $ = id => document.getElementById(id);
 const statusPill    = $('status-pill');
-const monsterSprite = $('monster-sprite-hud');
-const monsterNameEl = $('monster-name-hud');
-const hpBar = $('hp-bar'), hpText = $('hp-text');
+const sessionValueEl = $('session-value');
+const sessionModeLabelEl = $('session-mode-label');
 const screenFlash = $('screen-flash');
-const dmgPopup = $('dmg-popup');
+const repPopup = $('rep-popup');
 const resultOverlay = $('result-overlay');
 const resultTitle   = $('result-title');
 const countdownOverlay = $('countdown-overlay');
@@ -875,8 +1007,24 @@ const canvas = $('pose-canvas');
 const ctx    = canvas.getContext('2d');
 const ingameMenuOverlay = $('ingame-menu-overlay');
 
+// ===================== VOICE =====================
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = LANG === 'ru' ? 'ru-RU' : 'en-US';
+    u.rate = 1.15;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  } catch (e) { /* speech synthesis unsupported — silently ignore */ }
+}
+function unlockVoice() {
+  if (!window.speechSynthesis) return;
+  try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch (e) {}
+}
+
 // ===================== NAVIGATION =====================
-const OVERLAY_SCREENS = ['nickname-screen', 'menu-screen', 'instr-screen', 'profile-screen'];
+const OVERLAY_SCREENS = ['nickname-screen', 'menu-screen', 'mode-screen', 'instr-screen', 'profile-screen'];
 
 function showOverlayScreen(id) {
   OVERLAY_SCREENS.forEach(s => $(s).classList.remove('show'));
@@ -918,31 +1066,44 @@ function openProfile(from) {
   showOverlayScreen('profile-screen');
 }
 
+function badgeIsActive(badge) {
+  return badge && (Date.now() - badge.ts) <= THIRTY_DAYS_MS;
+}
+
 function renderProfile() {
   $('profile-name').textContent = profile.nickname;
-  $('profile-reps').textContent = profile.totalReps;
-  $('profile-kills').textContent = profile.totalKills;
 
-  const monstersEl = $('profile-monsters');
-  monstersEl.innerHTML = '';
-  MONSTERS.forEach(m => {
-    const count = profile.killsByMonster[m.name] || 0;
-    const row = document.createElement('div');
-    row.className = 'pm-row' + (count === 0 ? ' locked' : '');
-    row.innerHTML = `<span class="pm-icon">${renderMonsterIcon(m, 24)}</span><span class="pm-name">${m.name}</span><span class="pm-count">x${count}</span>`;
-    monstersEl.appendChild(row);
-  });
+  const points = profile.totalReps + profile.totalHoldSeconds;
+  const rank = getRank(points);
+  const next = getNextRank(rank);
+  $('rank-icon').innerHTML = renderPixelArt(rank, 48);
+  $('rank-icon').className = rank.id === 'legend' ? 'legend-glow' : '';
+  $('rank-label').textContent = rankLabel(rank);
+  $('rank-progress-bar').style.width = (next ? Math.min(100, (points - rank.min) / (next.min - rank.min) * 100) : 100) + '%';
+  $('rank-progress-text').textContent = t('rankProgress')(points, next);
+
+  const badgesEl = $('profile-badges');
+  badgesEl.innerHTML = '';
+  badgesEl.appendChild(badgeRow(t('badgeReps'), profile.bestRepsSession, t('resultUnitReps')));
+  badgesEl.appendChild(badgeRow(t('badgeHold'), profile.bestHoldSession, t('resultUnitHold')));
 
   const achEl = $('profile-achievements');
   achEl.innerHTML = '';
   REP_MILESTONES.forEach(n => {
-    const unlocked = profile.totalReps >= n;
-    achEl.appendChild(achRow('dumbbell', `${n} отжиманий всего`, unlocked));
+    achEl.appendChild(achRow('dumbbell', t('achReps')(n), profile.totalReps >= n));
   });
-  KILL_MILESTONES.forEach(n => {
-    const unlocked = profile.totalKills >= n;
-    achEl.appendChild(achRow('star', `${n} побед над монстрами`, unlocked));
+  HOLD_MILESTONES.forEach(n => {
+    achEl.appendChild(achRow('hourglass', t('achHold')(n), profile.totalHoldSeconds >= n));
   });
+}
+
+function badgeRow(label, badge, unit) {
+  const row = document.createElement('div');
+  const active = badgeIsActive(badge);
+  row.className = 'badge-row' + (active ? '' : ' empty');
+  const value = active ? `${badge.value} ${unit}` : t('badgeEmpty');
+  row.innerHTML = `<span class="badge-label">${label}</span><span class="badge-value">${value}</span>`;
+  return row;
 }
 
 function achRow(iconKey, label, unlocked) {
@@ -981,105 +1142,128 @@ function onNicknameConfirm() {
     $('nickname-input').focus();
     return;
   }
-  profile = { nickname: name, totalReps: 0, totalKills: 0, killsByMonster: {} };
+  profile = { nickname: name, totalReps: 0, totalHoldSeconds: 0, bestRepsSession: null, bestHoldSession: null };
   saveProfile();
   showOverlayScreen('menu-screen');
 }
 
-// ===================== MONSTER =====================
-function loadMonster(idx) {
-  currentMonster = MONSTERS[idx % MONSTERS.length];
-  maxHP = currentMonster.hp + Math.floor((wave - 1) * 2);
-  currentHP = maxHP;
-  monsterNameEl.textContent = currentMonster.name + (wave > 1 ? ` LV${wave}` : '');
-  monsterSprite.innerHTML = renderMonsterIcon(currentMonster, 64);
-  monsterSprite.className = '';
-  updateHP();
+// ===================== MODE / SESSION =====================
+function selectMode(mode) {
+  sessionMode = mode;
+  unlockVoice();
+  goPlay();
+}
+
+function resetSessionCounters() {
+  sessionReps = 0;
+  sessionHoldSeconds = 0;
+  holdConfirmedAt = null;
+  isHandstand = false;
+  handstandStartTime = null;
   repPhase = 'top';
+  sessionValueEl.textContent = '0';
+  sessionModeLabelEl.textContent = sessionMode === 'reps' ? t('sessionLabelReps') : t('sessionLabelHold');
+  refreshHudStats();
 }
 
-function updateHP() {
-  const pct = Math.max(0, currentHP / maxHP * 100);
-  hpBar.style.width = pct + '%';
-  hpText.textContent = `${Math.max(0,currentHP)} / ${maxHP}`;
-  hpBar.style.background = pct > 50
-    ? 'linear-gradient(90deg,#ff3030,#ff7070)'
-    : pct > 25
-      ? 'linear-gradient(90deg,#ff8030,#ffaa60)'
-      : 'linear-gradient(90deg,#ffcc00,#ffee60)';
+function refreshHudStats() {
+  const badge = sessionMode === 'reps' ? profile.bestRepsSession : profile.bestHoldSession;
+  $('stat-record').textContent = badgeIsActive(badge) ? badge.value : 0;
+  $('stat-record-lbl').textContent = t('statRecord');
+  const points = profile.totalReps + profile.totalHoldSeconds;
+  $('stat-points').textContent = points;
+  $('stat-points-lbl').textContent = t('statPoints');
+  $('stat-rank').textContent = rankLabel(getRank(points));
+  $('stat-rank-lbl').textContent = t('statRank');
 }
 
-function dealDamage() {
-  currentHP--;
-  totalReps++;
-  $('stat-reps').textContent = totalReps;
-  updateHP();
+function onRep() {
+  sessionReps++;
+  sessionValueEl.textContent = sessionReps;
 
-  profile.totalReps++;
-  saveProfile();
-
-  monsterSprite.classList.add('hit');
   screenFlash.style.opacity = '1';
-  setTimeout(() => { monsterSprite.classList.remove('hit'); screenFlash.style.opacity = '0'; }, 150);
+  setTimeout(() => { screenFlash.style.opacity = '0'; }, 120);
+  repPopup.textContent = '+1';
+  repPopup.classList.add('pop');
+  setTimeout(() => repPopup.classList.remove('pop'), 400);
 
-  dmgPopup.classList.add('pop');
-  setTimeout(() => dmgPopup.classList.remove('pop'), 500);
-
-  if (currentHP <= 0) monsterDead();
+  speak(String(sessionReps));
 }
 
-function monsterDead() {
-  kills++;
-  $('stat-kills').textContent = kills;
-  monsterSprite.classList.add('dead');
+function finalizeSession() {
   gameActive = false;
 
-  profile.totalKills++;
-  profile.killsByMonster[currentMonster.name] = (profile.killsByMonster[currentMonster.name] || 0) + 1;
+  const beforePoints = profile.totalReps + profile.totalHoldSeconds;
+  const rankBefore = getRank(beforePoints);
+
+  let value;
+  if (sessionMode === 'reps') {
+    value = sessionReps;
+    profile.totalReps += value;
+  } else {
+    value = Math.round(sessionHoldSeconds);
+    profile.totalHoldSeconds += value;
+  }
+
+  const badgeKey = sessionMode === 'reps' ? 'bestRepsSession' : 'bestHoldSession';
+  const badge = profile[badgeKey];
+  const isNewRecord = !badgeIsActive(badge) || value > badge.value;
+  if (isNewRecord) profile[badgeKey] = { value, ts: Date.now() };
+
   saveProfile();
 
-  setTimeout(() => {
-    resultTitle.innerHTML = pixelIcon('star', 22) + 'ПОБЕДА!';
-    resultTitle.className = 'win-title';
-    $('res-reps').textContent = totalReps;
-    $('res-kills').textContent = kills;
-    $('next-btn').textContent = 'СЛЕДУЮЩИЙ ▶';
-    resultOverlay.classList.add('show');
-  }, 600);
+  const afterPoints = profile.totalReps + profile.totalHoldSeconds;
+  const rankAfter = getRank(afterPoints);
+  const rankedUp = rankAfter.id !== rankBefore.id;
+
+  showResult(value, isNewRecord, rankedUp ? rankAfter : null);
 }
 
-function playerLose() {
-  gameActive = false;
-  resultTitle.innerHTML = pixelIcon('cross', 22) + 'ПОРАЖЕНИЕ';
-  resultTitle.className = 'lose-title';
-  $('res-reps').textContent = totalReps;
-  $('res-kills').textContent = kills;
-  $('next-btn').textContent = 'СНОВА ▶';
+function showResult(value, isNewRecord, rankedUpTo) {
+  resultTitle.textContent = t('resultTitle');
+  $('result-value').textContent = value;
+  $('res-value-lbl-val').textContent = sessionMode === 'reps' ? t('resultUnitReps') : t('resultUnitHold');
+
+  const recordBadge = $('result-record-badge');
+  recordBadge.classList.toggle('show', isNewRecord);
+  if (isNewRecord) {
+    recordBadge.innerHTML = pixelIcon('star', 16) + t('newRecord');
+    speak(t('newRecord'));
+  }
+
+  const rankupBadge = $('result-rankup-badge');
+  if (rankedUpTo) {
+    $('result-rankup-icon').innerHTML = renderPixelArt(rankedUpTo, 28);
+    $('result-rankup-text').textContent = t('rankUp')(rankLabel(rankedUpTo));
+    rankupBadge.classList.add('show');
+  } else {
+    rankupBadge.classList.remove('show');
+  }
+
+  $('next-btn').textContent = t('nextBtn');
   resultOverlay.classList.add('show');
 }
 
 function nextRound() {
   resultOverlay.classList.remove('show');
-  // If won, go to next monster; if lost, retry same
-  if (resultTitle.className === 'win-title') {
-    monsterIndex++;
-    if (monsterIndex > 0 && monsterIndex % MONSTERS.length === 0) wave++;
-    $('stat-wave').textContent = wave;
-  }
-  loadMonster(monsterIndex);
-  isHandstand = false;
-  handstandStartTime = null;
-  repPhase = 'top';
+  resetSessionCounters();
   startCountdown();
 }
 
 // ===================== STATUS =====================
+let lastStatus = 'waiting';
 function setStatus(s) {
+  lastStatus = s;
   statusPill.className = 'status-pill';
-  if (s === 'waiting')   { statusPill.classList.add('pill-waiting');   statusPill.innerHTML = pixelIcon('hourglass') + 'встань на руки'; }
-  if (s === 'detecting') { statusPill.classList.add('pill-detecting'); statusPill.innerHTML = pixelIcon('check') + 'тело найдено'; }
-  if (s === 'handstand') { statusPill.classList.add('pill-handstand'); statusPill.innerHTML = pixelIcon('arrowUp') + 'СТОЙКА!'; }
-  if (s === 'pushup')    { statusPill.classList.add('pill-pushup');    statusPill.innerHTML = pixelIcon('dumbbell') + 'ОТЖИМАЙСЯ!'; }
+  if (s === 'waiting')   { statusPill.classList.add('pill-waiting');   statusPill.innerHTML = pixelIcon('hourglass') + t('statusWaiting'); }
+  if (s === 'detecting') { statusPill.classList.add('pill-detecting'); statusPill.innerHTML = pixelIcon('check') + t('statusDetecting'); }
+  if (s === 'handstand') { statusPill.classList.add('pill-handstand'); statusPill.innerHTML = pixelIcon('arrowUp') + t('statusHandstand'); }
+  if (s === 'active') {
+    statusPill.classList.add('pill-active');
+    statusPill.innerHTML = sessionMode === 'reps'
+      ? pixelIcon('dumbbell') + t('statusReps')
+      : pixelIcon('hourglass') + t('statusHold');
+  }
 }
 
 // ===================== COUNTDOWN =====================
@@ -1087,11 +1271,11 @@ function startCountdown() {
   countdownOverlay.classList.add('show');
   let n = 5;
   countdownNum.textContent = n;
-  const t = setInterval(() => {
+  const timer = setInterval(() => {
     n--;
     countdownNum.textContent = n;
     if (n <= 0) {
-      clearInterval(t);
+      clearInterval(timer);
       countdownOverlay.classList.remove('show');
       gameActive = true;
       setStatus('waiting');
@@ -1102,14 +1286,11 @@ function startCountdown() {
 // ===================== START =====================
 function goPlay() {
   hideOverlayScreens();
+  resetSessionCounters();
 
   if (cameraStarted) {
-    // Camera already running — just start a fresh game session.
+    // Camera already running — just start a fresh session.
     $('game-view').style.display = 'block';
-    loadMonster(monsterIndex);
-    isHandstand = false;
-    handstandStartTime = null;
-    repPhase = 'top';
     startCountdown();
     return;
   }
@@ -1117,8 +1298,6 @@ function goPlay() {
   $('loading-msg').style.display = 'block';
   showOverlayScreen('instr-screen');
   $('instr-back-btn').style.display = 'none';
-
-  loadMonster(monsterIndex);
 
   const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
   pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
@@ -1162,7 +1341,7 @@ function goPlay() {
       startCountdown();
     };
   }).catch(err => {
-    $('loading-msg').textContent = 'Нет доступа к камере';
+    $('loading-msg').textContent = t('noCameraAccess');
     console.error(err);
   });
 }
@@ -1240,26 +1419,32 @@ function onResults(results) {
   if (inverted) {
     if (!handstandStartTime) handstandStartTime = Date.now();
     if (Date.now() - handstandStartTime > HANDSTAND_CONFIRM_MS) {
+      if (!isHandstand) holdConfirmedAt = Date.now();
       isHandstand = true;
-      setStatus('pushup');
+      setStatus('active');
     } else {
       setStatus('handstand');
     }
   } else {
-    if (isHandstand) playerLose();
+    if (isHandstand) { finalizeSession(); return; }
     isHandstand = false;
     handstandStartTime = null;
     setStatus('detecting');
   }
 
-  if (isHandstand) {
+  if (isHandstand && sessionMode === 'hold') {
+    sessionHoldSeconds = (Date.now() - holdConfirmedAt) / 1000;
+    sessionValueEl.textContent = Math.floor(sessionHoldSeconds);
+  }
+
+  if (isHandstand && sessionMode === 'reps') {
     const ea = Math.min(
       angle3(lShoulder, lElbow, lWrist),
       angle3(rShoulder, rElbow, rWrist)
     );
 
     if (repPhase === 'top' && ea < REP_DOWN)  repPhase = 'bottom';
-    if (repPhase === 'bottom' && ea > REP_UP) { repPhase = 'top'; dealDamage(); }
+    if (repPhase === 'bottom' && ea > REP_UP) { repPhase = 'top'; onRep(); }
 
     // Angle label on canvas
     const ex = lElbow.x * canvas.width;
@@ -1270,8 +1455,57 @@ function onResults(results) {
   }
 }
 
+// ===================== LANGUAGE =====================
+function applyLanguage(lang) {
+  LANG = lang;
+  localStorage.setItem('hf_lang', lang);
+  document.documentElement.lang = lang;
+
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === lang);
+  });
+
+  $('nickname-hint').textContent = t('nicknameHint');
+  $('nickname-input').placeholder = t('nicknamePlaceholder');
+  $('nickname-confirm-btn').textContent = t('btnContinue');
+
+  $('menu-play-btn').textContent = t('btnPlay');
+  $('menu-profile-btn').textContent = t('btnProfile');
+  $('menu-instr-btn').textContent = t('btnInstructions');
+
+  $('mode-title').textContent = t('modeTitle');
+  $('mode-reps-btn').textContent = t('modeReps');
+  $('mode-hold-btn').textContent = t('modeHold');
+  $('mode-back-btn').textContent = t('btnBack');
+
+  $('instr-title').textContent = t('instrTitle');
+  t('instrSteps').forEach((html, i) => { $('instr-step-' + (i + 1)).innerHTML = html; });
+  $('instr-back-btn').textContent = t('btnBack');
+  $('loading-msg').textContent = t('loadingCamera');
+
+  $('profile-title').textContent = t('profileTitle');
+  $('profile-badges-title').textContent = t('sectionBadges');
+  $('profile-achievements-title').textContent = t('sectionAchievements');
+  $('profile-back-btn').textContent = t('btnBack');
+
+  $('ingame-profile-btn').textContent = t('ingameProfile');
+  $('ingame-how-btn').textContent = t('ingameHow');
+  $('ingame-mainmenu-btn').textContent = t('ingameMainMenu');
+  $('ingame-resume-btn').textContent = t('ingameResume');
+
+  $('countdown-msg').innerHTML = pixelIcon('phone', 20) + t('countdownMsg');
+  $('countdown-sub').textContent = t('countdownSub');
+
+  if (cameraStarted) {
+    sessionModeLabelEl.textContent = sessionMode === 'reps' ? t('sessionLabelReps') : t('sessionLabelHold');
+    refreshHudStats();
+    setStatus(lastStatus);
+  }
+  if ($('profile-screen').classList.contains('show')) renderProfile();
+}
+
 // ===================== BOOT =====================
-$('countdown-msg').innerHTML = pixelIcon('phone', 20) + 'ПОСТАВЬ ТЕЛЕФОН СБОКУ<br>И ЗАНИМАЙ ПОЗИЦИЮ';
+applyLanguage(LANG);
 
 if (profile) {
   showOverlayScreen('menu-screen');
