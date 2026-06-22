@@ -40,7 +40,10 @@
   #hud-top {
     position: absolute;
     top: 0; left: 0; right: 0;
-    padding: 14px 16px 0;
+    /* Extra top/side breathing room so the HUD clears the safe zones
+       Reels/TikTok/Shorts overlay their own UI into when this footage
+       gets shared as a clip. */
+    padding: 56px 28px 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -58,11 +61,11 @@
     display: inline-flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 5px;
+    gap: 3px;
     background: rgba(0,0,0,0.65);
     border: 1px solid #c080ff44;
-    border-radius: 12px;
-    padding: 10px 16px;
+    border-radius: 10px;
+    padding: 7px 12px;
     backdrop-filter: blur(6px);
     width: fit-content;
   }
@@ -82,7 +85,7 @@
 
   #session-value {
     font-family: 'Press Start 2P', monospace;
-    font-size: 28px;
+    font-size: 22px;
     color: #fff;
     text-shadow: 0 0 16px #c080ff88;
     line-height: 1;
@@ -95,13 +98,13 @@
 
   #kebab-btn {
     flex-shrink: 0;
-    width: 40px;
-    height: 40px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
     background: rgba(0,0,0,0.65);
     border: 1px solid #ffffff22;
     color: #e8e0d0;
-    font-size: 20px;
+    font-size: 17px;
     line-height: 1;
     cursor: pointer;
     backdrop-filter: blur(6px);
@@ -145,7 +148,10 @@
   #hud-bottom {
     position: absolute;
     bottom: 0; left: 0; right: 0;
-    padding: 0 16px 24px;
+    /* Extra bottom/side breathing room so the HUD clears the caption
+       and like/comment/share column social apps overlay at the bottom
+       and right edge of vertical clips. */
+    padding: 0 28px 72px;
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
@@ -156,18 +162,18 @@
   .hud-stat {
     background: rgba(0,0,0,0.65);
     border: 1px solid #ffffff11;
-    border-radius: 10px;
-    padding: 8px 14px;
+    border-radius: 8px;
+    padding: 6px 10px;
     text-align: center;
     backdrop-filter: blur(4px);
   }
   .hud-stat-val {
     font-family: 'Press Start 2P', monospace;
-    font-size: 14px;
+    font-size: 11px;
     color: #c080ff;
     display: block;
   }
-  .hud-stat-lbl { font-size: 9px; color: #888; margin-top: 2px; display: block; }
+  .hud-stat-lbl { font-size: 8px; color: #888; margin-top: 2px; display: block; }
 
   /* ===== REP/HOLD FLASH ===== */
   #screen-flash {
