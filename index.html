@@ -1592,18 +1592,165 @@ function setRecUI(active) {
   $('rec-label').textContent = active ? 'STOP' : 'REC';
 }
 
-// Called each frame from onResults to composite video+skeleton onto recCanvas at 1080x1920
+// Helper: rounded rectangle path
+function recRoundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// Called each frame from onResults — composites video + skeleton + HUD onto recCanvas at 1080x1920
 function drawRecFrame(image) {
   if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
-  // Scale video to fill 1080x1920 (object-fit: cover)
+
+  const RW = recCanvas.width;   // 1080
+  const RH = recCanvas.height;  // 1920
+  // Scale factors relative to the display canvas dimensions
+  const scX = RW / canvas.width;
+  const scY = RH / canvas.height;
+
+  // 1. Draw video (object-fit: cover)
   const vw = image.width || 1280, vh = image.height || 720;
-  const rw = recCanvas.width, rh = recCanvas.height;
-  const scale = Math.max(rw / vw, rh / vh);
-  const dw = vw * scale, dh = vh * scale;
-  const dx = (rw - dw) / 2, dy = (rh - dh) / 2;
-  recCtx.drawImage(image, dx, dy, dw, dh);
-  // Copy the skeleton overlay from the display canvas, scaled to 1080x1920
-  recCtx.drawImage(canvas, 0, 0, rw, rh);
+  const vs = Math.max(RW / vw, RH / vh);
+  recCtx.drawImage(image, (RW - vw*vs)/2, (RH - vh*vs)/2, vw*vs, vh*vs);
+
+  // 2. Draw skeleton (copy from display canvas, scaled up)
+  recCtx.drawImage(canvas, 0, 0, RW, RH);
+
+  // 3. Draw HUD -------------------------------------------------------
+  recCtx.save();
+
+  // Padding mirrors the DOM (56px top, 28px sides, 72px bottom on display CSS)
+  const padTop  = 56  * scY;
+  const padSide = 28  * scX;
+  const padBot  = 72  * scY;
+
+  // -- Session card (top-left) --
+  const modeLabel = $('session-mode-label').textContent;
+  const valText   = $('session-value').textContent;
+  const unitText  = $('session-unit').textContent;
+
+  const cardPadX = 12 * scX, cardPadY = 7 * scY;
+  const labelSize = Math.round(9  * scX);
+  const valSize   = Math.round(22 * scX);
+  const unitSize  = Math.round(11 * scX);
+  const rowGap    = 3  * scY;
+
+  recCtx.font = `${labelSize}px 'Press Start 2P', monospace`;
+  const labelW = recCtx.measureText(modeLabel).width;
+  recCtx.font = `${valSize}px 'Press Start 2P', monospace`;
+  const valW = recCtx.measureText(valText).width;
+  recCtx.font = `${unitSize}px Inter, sans-serif`;
+  const unitW = unitText ? recCtx.measureText(unitText).width + 7*scX : 0;
+
+  const innerW   = Math.max(labelW, valW + unitW);
+  const cardW    = innerW + cardPadX * 2;
+  const cardH    = cardPadY + labelSize + rowGap + valSize + cardPadY;
+  const cardX    = padSide, cardY = padTop;
+
+  recCtx.fillStyle = 'rgba(0,0,0,0.65)';
+  recRoundRect(recCtx, cardX, cardY, cardW, cardH, 10 * scX);
+  recCtx.fill();
+  recCtx.strokeStyle = '#c080ff44';
+  recCtx.lineWidth = Math.max(1, scX);
+  recRoundRect(recCtx, cardX, cardY, cardW, cardH, 10 * scX);
+  recCtx.stroke();
+
+  // Mode label
+  recCtx.font = `${labelSize}px 'Press Start 2P', monospace`;
+  recCtx.fillStyle = '#c080ff';
+  recCtx.fillText(modeLabel, cardX + cardPadX, cardY + cardPadY + labelSize);
+
+  // Value
+  const valY = cardY + cardPadY + labelSize + rowGap + valSize;
+  recCtx.font = `${valSize}px 'Press Start 2P', monospace`;
+  recCtx.fillStyle = '#ffffff';
+  recCtx.shadowColor = '#c080ff88';
+  recCtx.shadowBlur = 16 * scX;
+  recCtx.fillText(valText, cardX + cardPadX, valY);
+  recCtx.shadowBlur = 0;
+
+  // Unit
+  if (unitText) {
+    recCtx.font = `${unitSize}px Inter, sans-serif`;
+    recCtx.fillStyle = '#888888';
+    recCtx.fillText(unitText, cardX + cardPadX + valW + 7*scX, valY);
+  }
+
+  // -- Status pill --
+  const pillEl   = $('status-pill');
+  const pillText = pillEl.textContent.trim();
+  if (pillText) {
+    const cs = window.getComputedStyle(pillEl);
+    const pillSize = Math.round(10 * scX);
+    recCtx.font = `bold ${pillSize}px Inter, sans-serif`;
+    const pillTW  = recCtx.measureText(pillText).width;
+    const pillPX  = 12 * scX, pillPY = 5 * scY;
+    const pillW   = pillTW + pillPX * 2;
+    const pillH   = pillSize + pillPY * 2;
+    const pillX   = padSide;
+    const pillY   = cardY + cardH + 8 * scY;
+
+    recCtx.fillStyle = cs.backgroundColor;
+    recRoundRect(recCtx, pillX, pillY, pillW, pillH, pillH / 2);
+    recCtx.fill();
+    recCtx.strokeStyle = cs.borderTopColor;
+    recCtx.lineWidth = Math.max(1, scX);
+    recRoundRect(recCtx, pillX, pillY, pillW, pillH, pillH / 2);
+    recCtx.stroke();
+
+    recCtx.fillStyle = cs.color;
+    recCtx.fillText(pillText, pillX + pillPX, pillY + pillPY + pillSize * 0.85);
+  }
+
+  // -- Bottom stat cards --
+  const statItems = [
+    { val: $('stat-record').textContent, lbl: $('stat-record-lbl').textContent },
+    { val: $('stat-points').textContent, lbl: $('stat-points-lbl').textContent },
+    { val: $('stat-rank').textContent,   lbl: $('stat-rank-lbl').textContent   },
+  ];
+  const statValSize = Math.round(14 * scX);
+  const statLblSize = Math.round(8  * scX);
+  const statPadX = 10 * scX, statPadY = 6 * scY;
+  const statGap  = 8 * scX;
+  const statArea = RW - padSide * 2;
+  const statCardW = (statArea - statGap * 2) / 3;
+  const statCardH = statPadY + statValSize + 6*scY + statLblSize + statPadY;
+  const statBaseY = RH - padBot - statCardH;
+
+  statItems.forEach((item, i) => {
+    const sx2 = padSide + i * (statCardW + statGap);
+
+    recCtx.fillStyle = 'rgba(0,0,0,0.65)';
+    recRoundRect(recCtx, sx2, statBaseY, statCardW, statCardH, 8 * scX);
+    recCtx.fill();
+    recCtx.strokeStyle = '#ffffff15';
+    recCtx.lineWidth = Math.max(1, scX);
+    recRoundRect(recCtx, sx2, statBaseY, statCardW, statCardH, 8 * scX);
+    recCtx.stroke();
+
+    // Value (purple)
+    recCtx.font = `${statValSize}px 'Press Start 2P', monospace`;
+    recCtx.fillStyle = '#c080ff';
+    const vw2 = recCtx.measureText(item.val).width;
+    recCtx.fillText(item.val, sx2 + statCardW/2 - vw2/2, statBaseY + statPadY + statValSize);
+
+    // Label (grey)
+    recCtx.font = `${statLblSize}px 'Press Start 2P', monospace`;
+    recCtx.fillStyle = '#888888';
+    const lw2 = recCtx.measureText(item.lbl).width;
+    recCtx.fillText(item.lbl, sx2 + statCardW/2 - lw2/2, statBaseY + statPadY + statValSize + 6*scY + statLblSize);
+  });
+
+  recCtx.restore();
 }
 
 // ===================== BOOT =====================
