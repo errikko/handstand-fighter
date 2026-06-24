@@ -111,6 +111,40 @@
   }
   #kebab-btn:active { transform: scale(0.94); }
 
+  #rec-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    height: 34px;
+    border-radius: 17px;
+    background: rgba(0,0,0,0.65);
+    border: 1px solid #ff4444aa;
+    color: #ff4444;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    letter-spacing: 0.5px;
+  }
+  #rec-btn.recording {
+    border-color: #ff4444;
+    background: rgba(180,0,0,0.5);
+    color: #fff;
+    animation: rec-pulse 1s ease-in-out infinite;
+  }
+  @keyframes rec-pulse {
+    0%,100% { box-shadow: 0 0 0 0 #ff444400; }
+    50%      { box-shadow: 0 0 0 4px #ff444433; }
+  }
+  #rec-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+
   .lang-toggle {
     position: absolute;
     top: 14px;
@@ -658,6 +692,7 @@
           <span id="session-unit"></span>
         </div>
       </div>
+      <button id="rec-btn" onclick="toggleRecording()"><span id="rec-dot"></span><span id="rec-label">REC</span></button>
       <button id="kebab-btn" onclick="openIngameMenu()">⋮</button>
     </div>
     <span class="status-pill pill-waiting" id="status-pill"></span>
@@ -1381,13 +1416,17 @@ function onResults(results) {
   ctx.fillRect(0,0,cw,ch);
 
   if (results.poseLandmarks) {
-    // Draw skeleton manually scaled
-    drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS,
-      { color: '#c080ff55', lineWidth: 3 });
-    drawLandmarks(ctx, results.poseLandmarks, { color: '#c080ff', lineWidth: 1, radius: 4 });
+    // Draw skeleton — skip face/head landmarks (0–10), only body
+    const bodyConnections = POSE_CONNECTIONS.filter(([a,b]) => a >= 11 && b >= 11);
+    const bodyLandmarks = results.poseLandmarks.map((lm, i) => i >= 11 ? lm : null).filter(Boolean);
+    // Remap connections to bodyLandmarks indices (landmark i → i-11)
+    const remappedConnections = bodyConnections.map(([a,b]) => [a-11, b-11]);
+    drawConnectors(ctx, bodyLandmarks, remappedConnections, { color: '#c080ff55', lineWidth: 3 });
+    drawLandmarks(ctx, bodyLandmarks, { color: '#c080ff', lineWidth: 1, radius: 4 });
   }
 
   ctx.restore();
+  drawRecFrame(results.image);
 
   if (!results.poseLandmarks) {
     if (gameActive) setStatus('waiting');
@@ -1508,6 +1547,63 @@ function applyLanguage(lang) {
     setStatus(lastStatus);
   }
   if ($('profile-screen').classList.contains('show')) renderProfile();
+}
+
+// ===================== RECORDING =====================
+let mediaRecorder = null;
+let recChunks = [];
+const recCanvas = document.createElement('canvas');
+recCanvas.width = 1080;
+recCanvas.height = 1920;
+const recCtx = recCanvas.getContext('2d');
+
+function toggleRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+  } else {
+    startRecording();
+  }
+}
+
+function startRecording() {
+  recChunks = [];
+  const stream = recCanvas.captureStream(30);
+  const mimeType = ['video/mp4', 'video/webm;codecs=h264', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+  mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recChunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recChunks, { type: mediaRecorder.mimeType || 'video/webm' });
+    const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `handstand-${Date.now()}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setRecUI(false);
+  };
+  mediaRecorder.start();
+  setRecUI(true);
+}
+
+function setRecUI(active) {
+  const btn = $('rec-btn');
+  btn.classList.toggle('recording', active);
+  $('rec-label').textContent = active ? 'STOP' : 'REC';
+}
+
+// Called each frame from onResults to composite video+skeleton onto recCanvas at 1080x1920
+function drawRecFrame(image) {
+  if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
+  // Scale video to fill 1080x1920 (object-fit: cover)
+  const vw = image.width || 1280, vh = image.height || 720;
+  const rw = recCanvas.width, rh = recCanvas.height;
+  const scale = Math.max(rw / vw, rh / vh);
+  const dw = vw * scale, dh = vh * scale;
+  const dx = (rw - dw) / 2, dy = (rh - dh) / 2;
+  recCtx.drawImage(image, dx, dy, dw, dh);
+  // Copy the skeleton overlay from the display canvas, scaled to 1080x1920
+  recCtx.drawImage(canvas, 0, 0, rw, rh);
 }
 
 // ===================== BOOT =====================
