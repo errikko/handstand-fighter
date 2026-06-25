@@ -347,6 +347,111 @@
   }
   #next-btn:active { transform: scale(0.96); }
 
+  /* ===== TECHNIQUE STOP BUTTON ===== */
+  #technique-stop-wrap {
+    display: none;
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 0 28px 72px;
+    justify-content: center;
+    align-items: flex-end;
+    z-index: 15;
+    pointer-events: none;
+  }
+  #technique-stop-wrap.show { display: flex; }
+  #technique-stop-btn {
+    pointer-events: all;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 12px;
+    background: rgba(0,0,0,0.75);
+    color: #ff4444;
+    border: 2px solid #ff4444;
+    border-radius: 12px;
+    padding: 14px 40px;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    letter-spacing: 1px;
+  }
+  #technique-stop-btn:active { transform: scale(0.96); }
+
+  /* ===== TECHNIQUE RESULT ===== */
+  #technique-result-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.9);
+    z-index: 100;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 32px 24px;
+    text-align: center;
+  }
+  #technique-result-overlay.show { display: flex; }
+  #tech-res-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+    color: #c080ff;
+    letter-spacing: 1px;
+  }
+  #tech-res-score-wrap {
+    line-height: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  #tech-res-score {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 64px;
+    color: #fff;
+    text-shadow: 0 0 30px #c080ff;
+  }
+  #tech-res-score-pct {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 24px;
+    color: #c080ff;
+  }
+  #tech-res-score-lbl {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    color: #f0c040;
+    letter-spacing: 1px;
+  }
+  #tech-res-issue-wrap {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid #ffffff22;
+    border-radius: 12px;
+    padding: 16px 24px;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  #tech-res-issue-label {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    color: #ff9944;
+    letter-spacing: 0.5px;
+  }
+  #tech-res-tip {
+    font-size: 13px;
+    color: #ccc;
+    line-height: 1.5;
+  }
+  #tech-res-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    background: #c080ff;
+    color: #0a0a0f;
+    border: none;
+    padding: 16px 32px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  #tech-res-btn:active { transform: scale(0.96); }
+
   /* ===== SHARED FULLSCREEN MENU SCREENS ===== */
   .menu-screen {
     position: fixed;
@@ -619,6 +724,7 @@
 <!-- MODE SELECT -->
 <div id="mode-screen" class="menu-screen">
   <div class="screen-title" id="mode-title"></div>
+  <button class="big-btn" id="mode-technique-btn" onclick="selectMode('technique')"></button>
   <button class="big-btn" id="mode-reps-btn" onclick="selectMode('reps')"></button>
   <button class="big-btn" id="mode-hold-btn" onclick="selectMode('hold')"></button>
   <button class="big-btn secondary" id="mode-back-btn" onclick="showOverlayScreen('menu-screen')"></button>
@@ -698,6 +804,11 @@
     <span class="status-pill pill-waiting" id="status-pill"></span>
   </div>
 
+  <!-- TECHNIQUE STOP BUTTON -->
+  <div id="technique-stop-wrap">
+    <button id="technique-stop-btn" onclick="stopTechnique()"></button>
+  </div>
+
   <!-- BOTTOM HUD -->
   <div id="hud-bottom">
     <div class="hud-stat">
@@ -733,6 +844,20 @@
   <div id="countdown-msg"></div>
   <div id="countdown-num">5</div>
   <div id="countdown-sub"></div>
+</div>
+
+<!-- TECHNIQUE RESULT -->
+<div id="technique-result-overlay">
+  <div id="tech-res-title"></div>
+  <div id="tech-res-score-wrap">
+    <span id="tech-res-score">0</span><span id="tech-res-score-pct">%</span>
+  </div>
+  <div id="tech-res-score-lbl"></div>
+  <div id="tech-res-issue-wrap">
+    <div id="tech-res-issue-label"></div>
+    <div id="tech-res-tip"></div>
+  </div>
+  <button id="tech-res-btn" onclick="nextRoundTechnique()"></button>
 </div>
 
 <!-- RESULT -->
@@ -904,8 +1029,9 @@ const STRINGS = {
     btnInstructions: 'ИНСТРУКЦИЯ',
     btnBack: 'НАЗАД',
     modeTitle: 'ВЫБЕРИ РЕЖИМ',
-    modeReps: 'ОТЖИМАНИЯ',
-    modeHold: 'СТОЙКА НА ВРЕМЯ',
+    modeTechnique: 'ТЕХНИКА',
+    modeReps: 'МАСТЕРСТВО: ОТЖИМАНИЯ',
+    modeHold: 'МАСТЕРСТВО: СТОЙКА',
     instrTitle: 'КАК ИГРАТЬ',
     instrSteps: [
       'Выбери режим: <b>«Отжимания»</b> считает повторения, <b>«Стойка»</b> засекает время на руках.',
@@ -929,6 +1055,8 @@ const STRINGS = {
     ingameHow: 'КАК ИГРАТЬ',
     ingameMainMenu: 'ГЛАВНОЕ МЕНЮ',
     ingameResume: 'ПРОДОЛЖИТЬ',
+    countdownMsgMastery: 'ПОСТАВЬ ТЕЛЕФОН СБОКУ<br>И ЗАНИМАЙ ПОЗИЦИЮ',
+    countdownMsgTechnique: 'ПОСТАВЬ ТЕЛЕФОН СПЕРЕДИ<br>НА ВЫСОТЕ ~1М',
     countdownMsg: 'ПОСТАВЬ ТЕЛЕФОН СБОКУ<br>И ЗАНИМАЙ ПОЗИЦИЮ',
     countdownSub: 'Игра начнётся автоматически',
     statusWaiting: 'встань на руки',
@@ -936,10 +1064,33 @@ const STRINGS = {
     statusHandstand: 'СТОЙКА!',
     statusReps: 'ОТЖИМАЙСЯ!',
     statusHold: 'ДЕРЖИСЬ!',
+    statusTechGood: 'ФОРМА ОК ✓',
+    statusTechBad: issue => `ИСПРАВЬ: ${issue}`,
     sessionLabelReps: 'ОТЖИМАНИЯ',
     sessionLabelHold: 'СТОЙКА',
+    sessionLabelTechnique: 'ФОРМА',
     sessionUnitReps: '',
     sessionUnitHold: 'сек',
+    sessionUnitTechnique: '%',
+    techStopBtn: 'СТОП',
+    techIssues: {
+      banana:    'БАНАН (ПРОГИБ)',
+      vertical:  'НАКЛОН ТЕЛА',
+      shoulders: 'ПЛЕЧИ НАЗАД',
+      knees:     'КОЛЕНИ СОГНУТЫ',
+    },
+    techTips: {
+      banana:    'Подкрути таз, напряги пресс и ягодицы — тело должно быть одной прямой линией.',
+      vertical:  'Тело уходит в сторону от вертикали. Найди баланс над запястьями.',
+      shoulders: 'Плечи уходят назад от запястий. Тяни плечи к ушам, активируй лопатки.',
+      knees:     'Выпрями колени полностью. Напряги квадрицепсы и потяни носки.',
+    },
+    techResTitle: 'АНАЛИЗ ФОРМЫ',
+    techResGrade: pct => pct >= 80 ? 'ОТЛИЧНО' : pct >= 50 ? 'ХОРОШО' : 'НУЖНА РАБОТА',
+    techResPerfect: 'Форма идеальная! Переходи к режиму Мастерство.',
+    techResMainIssue: issue => `Главное: ${issue}`,
+    techResAgain: 'ЕЩЁ РАЗ ▶',
+    techResTooShort: 'Слишком коротко — стой дольше для анализа',
     statRecord: 'рекорд',
     statPoints: 'очки',
     statRank: 'ранг',
@@ -960,8 +1111,9 @@ const STRINGS = {
     btnInstructions: 'HOW TO PLAY',
     btnBack: 'BACK',
     modeTitle: 'CHOOSE A MODE',
-    modeReps: 'PUSH-UPS',
-    modeHold: 'TIMED HOLD',
+    modeTechnique: 'TECHNIQUE',
+    modeReps: 'MASTERY: PUSH-UPS',
+    modeHold: 'MASTERY: HOLD',
     instrTitle: 'HOW TO PLAY',
     instrSteps: [
       'Pick a mode: <b>"Push-ups"</b> counts reps, <b>"Hold"</b> times your handstand.',
@@ -985,6 +1137,8 @@ const STRINGS = {
     ingameHow: 'HOW TO PLAY',
     ingameMainMenu: 'MAIN MENU',
     ingameResume: 'RESUME',
+    countdownMsgMastery: 'PUT YOUR PHONE ON ITS SIDE<br>AND GET INTO POSITION',
+    countdownMsgTechnique: 'PLACE YOUR PHONE IN FRONT<br>AT ABOUT 1M HEIGHT',
     countdownMsg: 'PUT YOUR PHONE ON ITS SIDE<br>AND GET INTO POSITION',
     countdownSub: 'The game will start automatically',
     statusWaiting: 'get into a handstand',
@@ -992,10 +1146,33 @@ const STRINGS = {
     statusHandstand: 'HANDSTAND!',
     statusReps: 'PUSH-UPS!',
     statusHold: 'HOLD!',
+    statusTechGood: 'FORM OK ✓',
+    statusTechBad: issue => `FIX: ${issue}`,
     sessionLabelReps: 'PUSH-UPS',
     sessionLabelHold: 'HOLD',
+    sessionLabelTechnique: 'FORM',
     sessionUnitReps: '',
     sessionUnitHold: 'sec',
+    sessionUnitTechnique: '%',
+    techStopBtn: 'STOP',
+    techIssues: {
+      banana:    'BANANA (ARCH)',
+      vertical:  'BODY TILT',
+      shoulders: 'SHOULDERS BACK',
+      knees:     'BENT KNEES',
+    },
+    techTips: {
+      banana:    'Tuck your pelvis, engage core and glutes — body should be one straight line.',
+      vertical:  'Body drifting from vertical. Find balance directly over your wrists.',
+      shoulders: 'Shoulders drifting behind wrists. Shrug shoulders to ears, activate scapula.',
+      knees:     'Straighten your knees fully. Engage quads and point your toes.',
+    },
+    techResTitle: 'FORM ANALYSIS',
+    techResGrade: pct => pct >= 80 ? 'EXCELLENT' : pct >= 50 ? 'GOOD' : 'NEEDS WORK',
+    techResPerfect: 'Perfect form! Move on to Mastery mode.',
+    techResMainIssue: issue => `Main issue: ${issue}`,
+    techResAgain: 'AGAIN ▶',
+    techResTooShort: 'Too short — hold longer for analysis',
     statRecord: 'record',
     statPoints: 'points',
     statRank: 'rank',
@@ -1037,7 +1214,7 @@ function saveProfile() {
 let profile = loadProfile();
 
 // ===================== STATE =====================
-let sessionMode = 'reps'; // 'reps' | 'hold'
+let sessionMode = 'reps'; // 'reps' | 'hold' | 'technique'
 let sessionReps = 0;
 let sessionHoldSeconds = 0;
 let holdConfirmedAt = null;
@@ -1046,6 +1223,13 @@ const HANDSTAND_CONFIRM_MS = 1000;
 let repPhase = 'top';
 const REP_DOWN = 115, REP_UP = 150;
 let gameActive = false;
+
+// Technique mode state
+let techGoodMs = 0;
+let techBadMs = 0;
+let techLastFrameTs = null;
+let techIssueMs = { banana: 0, vertical: 0, shoulders: 0, knees: 0 };
+let techCurrentIssue = null;
 let cameraStarted = false;
 let returnTo = 'menu'; // where overlay screens (instructions/profile) should return to
 let pausedGameActive = false;
@@ -1203,10 +1387,20 @@ function resetSessionCounters() {
   isHandstand = false;
   handstandStartTime = null;
   repPhase = 'top';
-  sessionValueEl.textContent = '0';
-  sessionModeLabelEl.textContent = sessionMode === 'reps' ? t('sessionLabelReps') : t('sessionLabelHold');
-  $('session-unit').textContent = sessionMode === 'reps' ? t('sessionUnitReps') : t('sessionUnitHold');
-  refreshHudStats();
+  techGoodMs = 0;
+  techBadMs = 0;
+  techLastFrameTs = null;
+  techIssueMs = { banana: 0, vertical: 0, shoulders: 0, knees: 0 };
+  techCurrentIssue = null;
+  const isTech = sessionMode === 'technique';
+  sessionValueEl.textContent = isTech ? '—' : '0';
+  sessionModeLabelEl.textContent = isTech ? t('sessionLabelTechnique')
+    : sessionMode === 'reps' ? t('sessionLabelReps') : t('sessionLabelHold');
+  $('session-unit').textContent = isTech ? '' : sessionMode === 'reps' ? t('sessionUnitReps') : t('sessionUnitHold');
+  $('technique-stop-wrap').classList.toggle('show', isTech);
+  $('hud-bottom').style.display = isTech ? 'none' : '';
+  if (isTech) $('technique-stop-btn').textContent = t('techStopBtn');
+  if (!isTech) refreshHudStats();
 }
 
 function refreshHudStats() {
@@ -1292,7 +1486,7 @@ function nextRound() {
 
 // ===================== STATUS =====================
 let lastStatus = 'waiting';
-function setStatus(s) {
+function setStatus(s, issueId) {
   lastStatus = s;
   statusPill.className = 'status-pill';
   if (s === 'waiting')   { statusPill.classList.add('pill-waiting');   statusPill.innerHTML = pixelIcon('hourglass') + t('statusWaiting'); }
@@ -1303,6 +1497,15 @@ function setStatus(s) {
     statusPill.innerHTML = sessionMode === 'reps'
       ? pixelIcon('dumbbell') + t('statusReps')
       : pixelIcon('hourglass') + t('statusHold');
+  }
+  if (s === 'techGood') {
+    statusPill.classList.add('pill-detecting');
+    statusPill.innerHTML = pixelIcon('check') + t('statusTechGood');
+  }
+  if (s === 'techBad') {
+    statusPill.classList.add('pill-handstand');
+    const issueLabel = issueId ? t('techIssues')[issueId] : '';
+    statusPill.innerHTML = pixelIcon('arrowUp') + t('statusTechBad')(issueLabel);
   }
 }
 
@@ -1465,20 +1668,43 @@ function onResults(results) {
     if (Date.now() - handstandStartTime > HANDSTAND_CONFIRM_MS) {
       if (!isHandstand) holdConfirmedAt = Date.now();
       isHandstand = true;
-      setStatus('active');
+      if (sessionMode !== 'technique') setStatus('active');
     } else {
       setStatus('handstand');
     }
   } else {
-    if (isHandstand) { finalizeSession(); return; }
+    if (isHandstand && sessionMode !== 'technique') { finalizeSession(); return; }
     isHandstand = false;
     handstandStartTime = null;
+    if (sessionMode === 'technique') techLastFrameTs = null;
     setStatus('detecting');
   }
 
   if (isHandstand && sessionMode === 'hold') {
     sessionHoldSeconds = (Date.now() - holdConfirmedAt) / 1000;
     sessionValueEl.textContent = Math.floor(sessionHoldSeconds);
+  }
+
+  if (isHandstand && sessionMode === 'technique') {
+    const now = Date.now();
+    const dt = techLastFrameTs ? now - techLastFrameTs : 0;
+    techLastFrameTs = now;
+
+    const form = analyzeForm(lm);
+    techCurrentIssue = form.mainIssue;
+
+    if (form.isGood) {
+      techGoodMs += dt;
+      setStatus('techGood');
+    } else {
+      techBadMs += dt;
+      if (form.mainIssue) techIssueMs[form.mainIssue] = (techIssueMs[form.mainIssue] || 0) + dt;
+      setStatus('techBad', form.mainIssue);
+    }
+
+    const totalMs = techGoodMs + techBadMs;
+    const pct = totalMs > 0 ? Math.round(techGoodMs / totalMs * 100) : 0;
+    sessionValueEl.textContent = pct + '%';
   }
 
   if (isHandstand && sessionMode === 'reps') {
@@ -1518,6 +1744,7 @@ function applyLanguage(lang) {
   $('menu-instr-btn').textContent = t('btnInstructions');
 
   $('mode-title').textContent = t('modeTitle');
+  $('mode-technique-btn').textContent = t('modeTechnique');
   $('mode-reps-btn').textContent = t('modeReps');
   $('mode-hold-btn').textContent = t('modeHold');
   $('mode-back-btn').textContent = t('btnBack');
@@ -1537,16 +1764,99 @@ function applyLanguage(lang) {
   $('ingame-mainmenu-btn').textContent = t('ingameMainMenu');
   $('ingame-resume-btn').textContent = t('ingameResume');
 
-  $('countdown-msg').innerHTML = pixelIcon('phone', 20) + t('countdownMsg');
+  const cdMsg = sessionMode === 'technique' ? t('countdownMsgTechnique') : t('countdownMsgMastery');
+  $('countdown-msg').innerHTML = pixelIcon('phone', 20) + cdMsg;
   $('countdown-sub').textContent = t('countdownSub');
 
   if (cameraStarted) {
-    sessionModeLabelEl.textContent = sessionMode === 'reps' ? t('sessionLabelReps') : t('sessionLabelHold');
-    $('session-unit').textContent = sessionMode === 'reps' ? t('sessionUnitReps') : t('sessionUnitHold');
+    const isTech = sessionMode === 'technique';
+    sessionModeLabelEl.textContent = isTech ? t('sessionLabelTechnique') : sessionMode === 'reps' ? t('sessionLabelReps') : t('sessionLabelHold');
+    $('session-unit').textContent = isTech ? '' : sessionMode === 'reps' ? t('sessionUnitReps') : t('sessionUnitHold');
     refreshHudStats();
     setStatus(lastStatus);
   }
   if ($('profile-screen').classList.contains('show')) renderProfile();
+}
+
+// ===================== TECHNIQUE MODE =====================
+function analyzeForm(lm) {
+  // Pick the side with better visibility (profile view = one side dominant)
+  const lVis = (lm[11].visibility||0) + (lm[23].visibility||0) + (lm[27].visibility||0);
+  const rVis = (lm[12].visibility||0) + (lm[24].visibility||0) + (lm[28].visibility||0);
+  const s = lVis >= rVis
+    ? { shoulder: lm[11], hip: lm[23], knee: lm[25], ankle: lm[27], wrist: lm[15] }
+    : { shoulder: lm[12], hip: lm[24], knee: lm[26], ankle: lm[28], wrist: lm[16] };
+
+  // Vector from wrist to ankle (body axis)
+  const bx = s.ankle.x - s.wrist.x, by = s.ankle.y - s.wrist.y;
+  const blen = Math.sqrt(bx*bx + by*by) || 0.001;
+
+  // 1. VERTICAL: angle of body axis from vertical (degrees)
+  const verticalAngle = Math.abs(Math.asin(Math.min(1, Math.abs(bx) / blen)) * 180 / Math.PI);
+
+  // 2. BANANA: perpendicular distance of hip from wrist→ankle line, as % of body length
+  const tp = ((s.hip.x - s.wrist.x)*bx + (s.hip.y - s.wrist.y)*by) / (blen*blen);
+  const cx = s.wrist.x + tp*bx, cy = s.wrist.y + tp*by;
+  const hipDev = Math.sqrt((s.hip.x-cx)**2 + (s.hip.y-cy)**2) / blen * 100;
+
+  // 3. SHOULDERS: horizontal offset of shoulder from wrist, as % of body length
+  const shoulderDev = Math.abs(s.shoulder.x - s.wrist.x) / blen * 100;
+
+  // 4. KNEES: angle at knee joint
+  const kneeAngle = angle3(s.hip, s.knee, s.ankle);
+
+  // Collect issues sorted by severity
+  const issues = [];
+  if (hipDev > 10)          issues.push({ id: 'banana',    sev: hipDev });
+  if (verticalAngle > 20)   issues.push({ id: 'vertical',  sev: verticalAngle });
+  if (shoulderDev > 8)      issues.push({ id: 'shoulders', sev: shoulderDev });
+  if (kneeAngle < 165)      issues.push({ id: 'knees',     sev: 165 - kneeAngle });
+  issues.sort((a, b) => b.sev - a.sev);
+
+  return { isGood: issues.length === 0, mainIssue: issues[0]?.id || null };
+}
+
+function stopTechnique() {
+  gameActive = false;
+  finalizeTechnique();
+}
+
+function nextRoundTechnique() {
+  $('technique-result-overlay').classList.remove('show');
+  selectMode('technique');
+}
+
+function finalizeTechnique() {
+  const totalMs = techGoodMs + techBadMs;
+  $('technique-result-overlay').classList.add('show');
+  $('tech-res-title').textContent = t('techResTitle');
+
+  if (totalMs < 1500) {
+    $('tech-res-score').textContent = '—';
+    $('tech-res-score-pct').textContent = '';
+    $('tech-res-score-lbl').textContent = '';
+    $('tech-res-issue-label').textContent = '';
+    $('tech-res-tip').textContent = t('techResTooShort');
+    $('tech-res-btn').textContent = t('techResAgain');
+    return;
+  }
+
+  const pct = Math.round(techGoodMs / totalMs * 100);
+  $('tech-res-score').textContent = pct;
+  $('tech-res-score-pct').textContent = '%';
+  $('tech-res-score-lbl').textContent = t('techResGrade')(pct);
+
+  // Find the issue that took the most time
+  const topIssue = Object.entries(techIssueMs).sort((a,b) => b[1]-a[1]).find(([,ms]) => ms > 500)?.[0] || null;
+
+  if (pct >= 80 || !topIssue) {
+    $('tech-res-issue-label').textContent = '';
+    $('tech-res-tip').textContent = t('techResPerfect');
+  } else {
+    $('tech-res-issue-label').textContent = t('techResMainIssue')(t('techIssues')[topIssue]);
+    $('tech-res-tip').textContent = t('techTips')[topIssue];
+  }
+  $('tech-res-btn').textContent = t('techResAgain');
 }
 
 // ===================== RECORDING =====================
