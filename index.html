@@ -352,6 +352,15 @@
   }
   #next-btn:active { transform: scale(0.96); }
 
+  #app-version {
+    position: absolute;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 11px;
+    color: #555;
+  }
+
   /* ===== TECHNIQUE STOP BUTTON ===== */
   #technique-stop-wrap {
     display: none;
@@ -724,6 +733,7 @@
   <button class="big-btn" id="menu-play-btn" onclick="showOverlayScreen('mode-screen')"></button>
   <button class="big-btn secondary" id="menu-profile-btn" onclick="openProfile('menu')"></button>
   <button class="big-btn secondary" id="menu-instr-btn" onclick="openInstructions('menu')"></button>
+  <div id="app-version">v0.6</div>
 </div>
 
 <!-- MODE SELECT -->
@@ -1544,7 +1554,7 @@ function goPlay() {
   showOverlayScreen('instr-screen');
   $('instr-back-btn').style.display = 'none';
 
-  const landmarkerReady = createPoseLandmarker();
+  const engineReady = initPoseEngine();
 
   const tryCamera = (constraints) =>
     navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
@@ -1558,9 +1568,8 @@ function goPlay() {
       return new Promise(resolve => { video.onloadedmetadata = resolve; });
     })
     .then(() => video.play())
-    .then(() => landmarkerReady)
-    .then(landmarker => {
-      poseLandmarker = landmarker;
+    .then(() => engineReady)
+    .then(() => {
       hideOverlayScreens();
       $('instr-back-btn').style.display = 'block';
       $('loading-msg').style.display = 'none';
@@ -1584,16 +1593,19 @@ const BODY_CONNECTIONS = [
   [15,17],[15,19],[15,21],[17,19],[16,18],[16,20],[16,22],[18,20],
 ];
 
-let poseLandmarker = null;
+let poseLandmarker = null; // main-thread fallback
+let poseWorker = null;     // preferred: inference off the main thread
+let workerBusy = false;
 let latestLm = null;     // smoothed landmarks in video pixel space
 let lastVideoTime = -1;
 let angleLabel = null;   // { value, color } for the reps elbow angle readout
 
-async function createPoseLandmarker() {
-  const { PoseLandmarker, FilesetResolver } = await import(`${TASKS_VISION_URL}/vision_bundle.mjs`);
-  const fileset = await FilesetResolver.forVisionTasks(`${TASKS_VISION_URL}/wasm`);
+// Shared by the worker and the main-thread fallback (stringified into the worker)
+async function createPoseLandmarker(base, model) {
+  const { PoseLandmarker, FilesetResolver } = await import(`${base}/vision_bundle.mjs`);
+  const fileset = await FilesetResolver.forVisionTasks(`${base}/wasm`);
   const options = delegate => ({
-    baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate },
+    baseOptions: { modelAssetPath: model, delegate },
     runningMode: 'VIDEO',
     numPoses: 1,
     minPoseDetectionConfidence: 0.6,
@@ -1602,6 +1614,84 @@ async function createPoseLandmarker() {
   });
   try { return await PoseLandmarker.createFromOptions(fileset, options('GPU')); }
   catch (e) { return await PoseLandmarker.createFromOptions(fileset, options('CPU')); }
+}
+
+const POSE_WORKER_SRC = `
+${createPoseLandmarker.toString()}
+let landmarker = null;
+self.onmessage = async (e) => {
+  const m = e.data;
+  if (m.type === 'init') {
+    try {
+      landmarker = await createPoseLandmarker(m.base, m.model);
+      self.postMessage({ type: 'ready' });
+    } catch (err) {
+      self.postMessage({ type: 'error', message: String(err) });
+    }
+  } else if (m.type === 'frame') {
+    let landmarks = null;
+    try {
+      const res = landmarker.detectForVideo(m.bitmap, m.ts);
+      landmarks = (res.landmarks && res.landmarks[0]) || null;
+    } catch (err) {}
+    m.bitmap.close();
+    self.postMessage({ type: 'result', landmarks });
+  }
+};`;
+
+function startPoseWorker() {
+  return new Promise((resolve, reject) => {
+    if (typeof Worker === 'undefined' || typeof createImageBitmap === 'undefined') return reject(new Error('no worker support'));
+    const url = URL.createObjectURL(new Blob([POSE_WORKER_SRC], { type: 'text/javascript' }));
+    const worker = new Worker(url);
+    const timeout = setTimeout(() => { worker.terminate(); reject(new Error('worker init timeout')); }, 45000);
+    worker.onerror = err => { clearTimeout(timeout); worker.terminate(); reject(err); };
+    worker.onmessage = e => {
+      if (e.data.type === 'ready') { clearTimeout(timeout); resolve(worker); }
+      if (e.data.type === 'error') { clearTimeout(timeout); worker.terminate(); reject(new Error(e.data.message)); }
+    };
+    worker.postMessage({ type: 'init', base: TASKS_VISION_URL, model: POSE_MODEL_URL });
+  });
+}
+
+async function initPoseEngine() {
+  try {
+    poseWorker = await startPoseWorker();
+    poseWorker.onmessage = e => {
+      if (e.data.type !== 'result') return;
+      workerBusy = false;
+      handleLandmarks(e.data.landmarks);
+    };
+  } catch (err) {
+    console.warn('Pose worker unavailable, using main thread:', err);
+    poseWorker = null;
+    poseLandmarker = await createPoseLandmarker(TASKS_VISION_URL, POSE_MODEL_URL);
+  }
+}
+
+function handleLandmarks(raw) {
+  if (raw) {
+    latestLm = smoothLandmarks(raw, video.videoWidth, video.videoHeight, performance.now() / 1000);
+  } else {
+    latestLm = null;
+    lmFilters = null;
+  }
+  processPose(latestLm);
+}
+
+function requestDetection() {
+  if (poseWorker) {
+    if (workerBusy) return;
+    workerBusy = true;
+    lastVideoTime = video.currentTime;
+    createImageBitmap(video)
+      .then(bitmap => poseWorker.postMessage({ type: 'frame', bitmap, ts: performance.now() }, [bitmap]))
+      .catch(() => { workerBusy = false; });
+  } else {
+    lastVideoTime = video.currentTime;
+    const res = poseLandmarker.detectForVideo(video, performance.now());
+    handleLandmarks(res.landmarks && res.landmarks[0]);
+  }
 }
 
 // One Euro filter: smooths jitter when still, stays responsive when moving fast
@@ -1631,19 +1721,7 @@ function renderLoop() {
   const cw = window.innerWidth, ch = window.innerHeight;
   if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
 
-  if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
-    lastVideoTime = video.currentTime;
-    const now = performance.now();
-    const res = poseLandmarker.detectForVideo(video, now);
-    const raw = res.landmarks && res.landmarks[0];
-    if (raw) {
-      latestLm = smoothLandmarks(raw, video.videoWidth, video.videoHeight, now / 1000);
-    } else {
-      latestLm = null;
-      lmFilters = null;
-    }
-    processPose(latestLm);
-  }
+  if (video.readyState >= 2 && video.currentTime !== lastVideoTime) requestDetection();
 
   drawOverlay(latestLm);
   drawRecFrame(video);
@@ -1941,7 +2019,9 @@ function startRecording() {
   recChunks = [];
   const stream = recCanvas.captureStream(30);
   const mimeType = ['video/mp4', 'video/webm;codecs=h264', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
-  mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+  const recOptions = { videoBitsPerSecond: 10_000_000 };
+  if (mimeType) recOptions.mimeType = mimeType;
+  mediaRecorder = new MediaRecorder(stream, recOptions);
   mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recChunks.push(e.data); };
   mediaRecorder.onstop = () => {
     const blob = new Blob(recChunks, { type: mediaRecorder.mimeType || 'video/webm' });
