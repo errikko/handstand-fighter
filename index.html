@@ -26,14 +26,19 @@
     display: none;
   }
 
-  #video { display: none; }
+  #video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
 
   #pose-canvas {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
   }
 
   /* ===== HUD OVERLAYS ===== */
@@ -878,9 +883,6 @@
 </div>
 
 <!-- MediaPipe -->
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 
 <script>
 // ===================== PIXEL ART RENDERER =====================
@@ -1542,51 +1544,146 @@ function goPlay() {
   showOverlayScreen('instr-screen');
   $('instr-back-btn').style.display = 'none';
 
-  const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
-  pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
-  pose.onResults(onResults);
+  const landmarkerReady = createPoseLandmarker();
 
-  // Use back camera — try exact first, fallback to ideal
   const tryCamera = (constraints) =>
     navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
+  const quality = { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } };
 
-  tryCamera({ facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } })
-    .catch(() => tryCamera({ facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }))
-    .catch(() => tryCamera({ width: { ideal: 1280 }, height: { ideal: 720 } }))
+  tryCamera({ facingMode: { exact: 'environment' }, ...quality })
+    .catch(() => tryCamera({ facingMode: 'environment', ...quality }))
+    .catch(() => tryCamera(quality))
     .then(stream => {
-    video.srcObject = stream;
-    video.onloadedmetadata = () => {
-      canvas.width  = video.videoWidth;
-      canvas.height = video.videoHeight;
-
+      video.srcObject = stream;
+      return new Promise(resolve => { video.onloadedmetadata = resolve; });
+    })
+    .then(() => video.play())
+    .then(() => landmarkerReady)
+    .then(landmarker => {
+      poseLandmarker = landmarker;
       hideOverlayScreens();
       $('instr-back-btn').style.display = 'block';
       $('loading-msg').style.display = 'none';
       $('game-view').style.display = 'block';
       cameraStarted = true;
-
-      video.play();
-
-      // Manual frame loop (avoid mediapipe Camera helper — it re-requests
-      // getUserMedia internally and overrides our back-camera stream with
-      // the default front-facing camera).
-      let sending = false;
-      async function frameLoop() {
-        if (!sending) {
-          sending = true;
-          await pose.send({ image: video });
-          sending = false;
-        }
-        requestAnimationFrame(frameLoop);
-      }
-      requestAnimationFrame(frameLoop);
-
+      requestAnimationFrame(renderLoop);
       startCountdown();
-    };
-  }).catch(err => {
-    $('loading-msg').textContent = t('noCameraAccess');
-    console.error(err);
+    })
+    .catch(err => {
+      $('loading-msg').textContent = t('noCameraAccess');
+      console.error(err);
+    });
+}
+
+// ===================== POSE ENGINE (MediaPipe Tasks) =====================
+const TASKS_VISION_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const POSE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task';
+const BODY_CONNECTIONS = [
+  [11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],
+  [23,25],[25,27],[24,26],[26,28],[27,29],[29,31],[27,31],[28,30],[30,32],[28,32],
+  [15,17],[15,19],[15,21],[17,19],[16,18],[16,20],[16,22],[18,20],
+];
+
+let poseLandmarker = null;
+let latestLm = null;     // smoothed landmarks in video pixel space
+let lastVideoTime = -1;
+let angleLabel = null;   // { value, color } for the reps elbow angle readout
+
+async function createPoseLandmarker() {
+  const { PoseLandmarker, FilesetResolver } = await import(`${TASKS_VISION_URL}/vision_bundle.mjs`);
+  const fileset = await FilesetResolver.forVisionTasks(`${TASKS_VISION_URL}/wasm`);
+  const options = delegate => ({
+    baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate },
+    runningMode: 'VIDEO',
+    numPoses: 1,
+    minPoseDetectionConfidence: 0.6,
+    minPosePresenceConfidence: 0.6,
+    minTrackingConfidence: 0.6,
   });
+  try { return await PoseLandmarker.createFromOptions(fileset, options('GPU')); }
+  catch (e) { return await PoseLandmarker.createFromOptions(fileset, options('CPU')); }
+}
+
+// One Euro filter: smooths jitter when still, stays responsive when moving fast
+function oneEuroAlpha(cutoff, dt) { const tau = 1 / (2 * Math.PI * cutoff); return 1 / (1 + tau / dt); }
+class OneEuro {
+  constructor(minCutoff, beta) { this.minCutoff = minCutoff; this.beta = beta; this.x = null; this.dx = 0; this.t = 0; }
+  filter(x, t) {
+    if (this.x === null) { this.x = x; this.t = t; return x; }
+    const dt = Math.max(1e-3, t - this.t);
+    this.t = t;
+    this.dx += oneEuroAlpha(1, dt) * ((x - this.x) / dt - this.dx);
+    this.x += oneEuroAlpha(this.minCutoff + this.beta * Math.abs(this.dx), dt) * (x - this.x);
+    return this.x;
+  }
+}
+let lmFilters = null;
+function smoothLandmarks(raw, vw, vh, tSec) {
+  if (!lmFilters) lmFilters = raw.map(() => ({ x: new OneEuro(1, 0.007), y: new OneEuro(1, 0.007) }));
+  return raw.map((p, i) => ({
+    x: lmFilters[i].x.filter(p.x * vw, tSec),
+    y: lmFilters[i].y.filter(p.y * vh, tSec),
+    visibility: p.visibility ?? 1,
+  }));
+}
+
+function renderLoop() {
+  const cw = window.innerWidth, ch = window.innerHeight;
+  if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+
+  if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    const now = performance.now();
+    const res = poseLandmarker.detectForVideo(video, now);
+    const raw = res.landmarks && res.landmarks[0];
+    if (raw) {
+      latestLm = smoothLandmarks(raw, video.videoWidth, video.videoHeight, now / 1000);
+    } else {
+      latestLm = null;
+      lmFilters = null;
+    }
+    processPose(latestLm);
+  }
+
+  drawOverlay(latestLm);
+  drawRecFrame(video);
+  requestAnimationFrame(renderLoop);
+}
+
+// Maps video pixel coords to screen coords, matching the <video> object-fit: cover crop
+function coverTransform() {
+  const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+  const s = Math.max(canvas.width / vw, canvas.height / vh);
+  return { s, dx: (canvas.width - vw * s) / 2, dy: (canvas.height - vh * s) / 2 };
+}
+
+function drawOverlay(lm) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!lm) return;
+
+  const { s, dx, dy } = coverTransform();
+  const px = i => lm[i].x * s + dx, py = i => lm[i].y * s + dy;
+
+  ctx.strokeStyle = '#c080ff55';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  for (const [a, b] of BODY_CONNECTIONS) { ctx.moveTo(px(a), py(a)); ctx.lineTo(px(b), py(b)); }
+  ctx.stroke();
+
+  ctx.fillStyle = '#c080ff';
+  for (let i = 11; i < lm.length; i++) {
+    ctx.beginPath();
+    ctx.arc(px(i), py(i), 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (angleLabel) {
+    ctx.font = 'bold 20px Inter';
+    ctx.fillStyle = angleLabel.color;
+    ctx.fillText(angleLabel.value + '°', px(13) + 8, py(13));
+  }
 }
 
 // ===================== POSE DETECTION =====================
@@ -1599,44 +1696,14 @@ function angle3(a, b, c) {
   return Math.acos(Math.min(1,Math.max(-1,dot/mag))) * 180/Math.PI;
 }
 
-function onResults(results) {
-  // Resize canvas to fill screen
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
+// lm: smoothed landmarks in video pixel space (keeps angles/ratios undistorted)
+function processPose(lm) {
+  angleLabel = null;
 
-  ctx.save();
-  // Draw video covering full canvas (object-fit: cover style)
-  const vw = results.image.width || video.videoWidth || 1280;
-  const vh = results.image.height || video.videoHeight || 720;
-  const cw = canvas.width, ch = canvas.height;
-  const scale = Math.max(cw/vw, ch/vh);
-  const dw = vw*scale, dh = vh*scale;
-  const dx = (cw-dw)/2, dy = (ch-dh)/2;
-  ctx.drawImage(results.image, dx, dy, dw, dh);
-
-  // Dim overlay
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.fillRect(0,0,cw,ch);
-
-  if (results.poseLandmarks) {
-    // Draw skeleton — skip face/head landmarks (0–10), only body
-    const bodyConnections = POSE_CONNECTIONS.filter(([a,b]) => a >= 11 && b >= 11);
-    const bodyLandmarks = results.poseLandmarks.map((lm, i) => i >= 11 ? lm : null).filter(Boolean);
-    // Remap connections to bodyLandmarks indices (landmark i → i-11)
-    const remappedConnections = bodyConnections.map(([a,b]) => [a-11, b-11]);
-    drawConnectors(ctx, bodyLandmarks, remappedConnections, { color: '#c080ff55', lineWidth: 3 });
-    drawLandmarks(ctx, bodyLandmarks, { color: '#c080ff', lineWidth: 1, radius: 4 });
-  }
-
-  ctx.restore();
-  drawRecFrame(results.image);
-
-  if (!results.poseLandmarks) {
+  if (!lm) {
     if (gameActive) setStatus('waiting');
     return;
   }
-
-  const lm = results.poseLandmarks;
 
   // Require key body landmarks visible (shoulders, hips, ankles, wrists)
   const keyIds = [11, 12, 23, 24, 27, 28, 15, 16];
@@ -1716,12 +1783,7 @@ function onResults(results) {
     if (repPhase === 'top' && ea < REP_DOWN)  repPhase = 'bottom';
     if (repPhase === 'bottom' && ea > REP_UP) { repPhase = 'top'; onRep(); }
 
-    // Angle label on canvas
-    const ex = lElbow.x * canvas.width;
-    const ey = lElbow.y * canvas.height;
-    ctx.font = 'bold 20px Inter';
-    ctx.fillStyle = ea < REP_DOWN ? '#c080ff' : '#f0c040';
-    ctx.fillText(Math.round(ea) + '°', ex + 8, ey);
+    angleLabel = { value: Math.round(ea), color: ea < REP_DOWN ? '#c080ff' : '#f0c040' };
   }
 }
 
@@ -1917,7 +1979,7 @@ function recRoundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// Called each frame from onResults — composites video + skeleton + HUD onto recCanvas at 1080x1920
+// Called each frame from renderLoop — composites video + skeleton + HUD onto recCanvas at 1080x1920
 function drawRecFrame(image) {
   if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
 
@@ -1928,7 +1990,7 @@ function drawRecFrame(image) {
   const scY = RH / canvas.height;
 
   // 1. Draw video (object-fit: cover)
-  const vw = image.width || 1280, vh = image.height || 720;
+  const vw = image.videoWidth || 1280, vh = image.videoHeight || 720;
   const vs = Math.max(RW / vw, RH / vh);
   recCtx.drawImage(image, (RW - vw*vs)/2, (RH - vh*vs)/2, vw*vs, vh*vs);
 
