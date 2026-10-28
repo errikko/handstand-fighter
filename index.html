@@ -597,7 +597,7 @@
   }
 
   /* ===== NICKNAME SCREEN ===== */
-  #nickname-input {
+  #nickname-input, #login-email {
     width: 100%;
     max-width: 340px;
     font-family: 'Inter', sans-serif;
@@ -610,7 +610,18 @@
     margin-bottom: 18px;
     text-align: center;
   }
-  #nickname-input:focus { outline: none; border-color: #f0c040; }
+  #nickname-input:focus, #login-email:focus { outline: none; border-color: #f0c040; }
+  #login-hint, #login-sent-text, #boot-msg {
+    font-size: 13px;
+    color: #999;
+    text-align: center;
+    max-width: 320px;
+    line-height: 1.5;
+    margin-bottom: 18px;
+  }
+  #login-sent-text { color: #e8e0d0; }
+  #login-error { font-size: 12px; color: #ff7a7a; text-align: center; max-width: 320px; margin-top: 12px; min-height: 1em; }
+  #profile-email { font-size: 12px; color: #777; margin-top: -6px; margin-bottom: 14px; }
   #nickname-hint {
     font-size: 12px;
     color: #888;
@@ -754,6 +765,32 @@
 </head>
 <body>
 
+<!-- BOOT SCREEN -->
+<div id="boot-screen" class="menu-screen">
+  <div class="screen-logo">HANDSTAND FIGHTER</div>
+  <div id="boot-msg"></div>
+  <button class="big-btn secondary" id="boot-retry-btn" hidden onclick="location.reload()"></button>
+</div>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen" class="menu-screen">
+  <div class="lang-toggle">
+    <button class="lang-btn" data-lang="ru" onclick="applyLanguage('ru')">RU</button>
+    <button class="lang-btn" data-lang="en" onclick="applyLanguage('en')">EN</button>
+  </div>
+  <div class="screen-logo">HANDSTAND FIGHTER</div>
+  <div id="login-form">
+    <div id="login-hint"></div>
+    <input id="login-email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false">
+    <button class="big-btn" id="login-send-btn" onclick="onLoginSubmit()"></button>
+  </div>
+  <div id="login-sent" hidden>
+    <div id="login-sent-text"></div>
+    <button class="big-btn secondary" id="login-other-btn" onclick="showLoginForm()"></button>
+  </div>
+  <div id="login-error"></div>
+</div>
+
 <!-- NICKNAME SCREEN -->
 <div id="nickname-screen" class="menu-screen">
   <div class="lang-toggle">
@@ -776,7 +813,7 @@
   <button class="big-btn" id="menu-play-btn" onclick="showOverlayScreen('mode-screen')"></button>
   <button class="big-btn secondary" id="menu-profile-btn" onclick="openProfile('menu')"></button>
   <button class="big-btn secondary" id="menu-instr-btn" onclick="openInstructions('menu')"></button>
-  <div id="app-version">v0.8</div>
+  <div id="app-version">v0.9</div>
 </div>
 
 <!-- MODE SELECT -->
@@ -823,6 +860,7 @@
 <div id="profile-screen" class="menu-screen">
   <div class="screen-title" id="profile-title"></div>
   <div id="profile-name">Игрок</div>
+  <div id="profile-email"></div>
 
   <div id="rank-card">
     <div id="rank-icon"></div>
@@ -839,6 +877,7 @@
   <div class="profile-section-title" id="profile-achievements-title"></div>
   <div id="profile-achievements"></div>
 
+  <button class="big-btn secondary" id="profile-logout-btn" onclick="signOut()"></button>
   <button class="big-btn" id="profile-back-btn" onclick="closeOverlayScreen()"></button>
 </div>
 
@@ -953,7 +992,7 @@
   <button id="next-btn" onclick="nextRound()"></button>
 </div>
 
-<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 
 <script>
 // ===================== PIXEL ART RENDERER =====================
@@ -1094,7 +1133,20 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 // ===================== i18n =====================
 const STRINGS = {
   ru: {
-    nicknameHint: 'Придумай ник игрока — под ним будет сохраняться твой прогресс на этом устройстве.',
+    nicknameHint: 'Придумай ник игрока — так тебя будут видеть в игре.',
+    loginHint: 'Войди по email — пришлём ссылку для входа. Пароль не нужен, прогресс сохранится в аккаунте.',
+    loginPlaceholder: 'твой@email.com',
+    loginSend: 'ПОЛУЧИТЬ ССЫЛКУ',
+    loginSending: 'ОТПРАВЛЯЕМ...',
+    loginSent: email => `Ссылка для входа отправлена на ${email}. Открой письмо на этом телефоне и нажми на ссылку.`,
+    loginOtherEmail: 'ДРУГОЙ EMAIL',
+    loginError: 'Не получилось отправить письмо. Попробуй ещё раз.',
+    loginRateLimited: 'Слишком много попыток. Подожди пару минут и попробуй снова.',
+    loginLinkExpired: 'Ссылка устарела или уже использована. Запроси новую.',
+    bootLoading: 'Загружаем профиль...',
+    bootError: 'Не удалось загрузить профиль. Проверь интернет и попробуй снова.',
+    bootRetry: 'ПОВТОРИТЬ',
+    btnLogout: 'ВЫЙТИ ИЗ АККАУНТА',
     nicknamePlaceholder: 'Твой ник',
     btnContinue: 'ПРОДОЛЖИТЬ',
     btnPlay: 'ИГРАТЬ',
@@ -1182,7 +1234,20 @@ const STRINGS = {
     ranks: { rookie: 'НОВИЧОК', fighter: 'БОЕЦ', warrior: 'ВОИН', master: 'МАСТЕР', legend: 'ЛЕГЕНДА' },
   },
   en: {
-    nicknameHint: 'Pick a player nickname — your progress will be saved under it on this device.',
+    nicknameHint: 'Pick a player nickname — this is how you will appear in the game.',
+    loginHint: "Sign in with email — we'll send you a sign-in link. No password needed, your progress is saved to your account.",
+    loginPlaceholder: 'you@email.com',
+    loginSend: 'GET SIGN-IN LINK',
+    loginSending: 'SENDING...',
+    loginSent: email => `Sign-in link sent to ${email}. Open the email on this phone and tap the link.`,
+    loginOtherEmail: 'USE ANOTHER EMAIL',
+    loginError: "Couldn't send the email. Please try again.",
+    loginRateLimited: 'Too many attempts. Wait a couple of minutes and try again.',
+    loginLinkExpired: 'This link has expired or was already used. Request a new one.',
+    bootLoading: 'Loading your profile...',
+    bootError: "Couldn't load your profile. Check your connection and try again.",
+    bootRetry: 'TRY AGAIN',
+    btnLogout: 'SIGN OUT',
     nicknamePlaceholder: 'Your nickname',
     btnContinue: 'CONTINUE',
     btnPlay: 'PLAY',
@@ -1275,28 +1340,215 @@ let LANG = localStorage.getItem('hf_lang') || 'ru';
 function t(key) { return STRINGS[LANG][key]; }
 function rankLabel(rank) { return STRINGS[LANG].ranks[rank.id]; }
 
-// ===================== PROFILE (persisted) =====================
-const PROFILE_KEY = 'hf_profile';
+// ===================== ACCOUNT & PROFILE (Supabase) =====================
+const SUPABASE_URL = 'https://qjubkzmksxuogqiqggjm.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_hoMvUd59QfBWtEJbzk3j3w_rEChqYss';
+const LEGACY_PROFILE_KEY = 'hf_profile';       // pre-account local progress
+const MIGRATED_KEY = 'hf_profile_migrated';
+const PROFILE_CACHE_KEY = 'hf_profile_cache';  // offline copy of the signed-in profile
+const REF_KEY = 'hf_ref';
+const REF_RE = /^[a-z0-9_-]{1,64}$/;
 
-function loadProfile() {
+// Read before the Supabase client consumes the URL hash
+const authErrorInUrl = new URLSearchParams(location.hash.slice(1)).get('error_code');
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+});
+
+let authUser = null;
+let profile = null;
+let profileSyncPending = false;
+
+function storageGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+function storageSet(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+function storageRemove(key) { try { localStorage.removeItem(key); } catch (e) {} }
+
+// First-touch attribution: the first ?ref= code seen on this device wins
+function captureReferral() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has('ref')) return;
+  const code = (params.get('ref') || '').trim().toLowerCase();
+  if (REF_RE.test(code) && !storageGet(REF_KEY)) storageSet(REF_KEY, code);
+  params.delete('ref');
+  const qs = params.toString();
+  history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+}
+
+function badgeFromRow(value, at) {
+  return value != null && at ? { value, ts: Date.parse(at) } : null;
+}
+
+function rowToProfile(row) {
+  return {
+    nickname: row.nickname || '',
+    totalReps: row.total_reps || 0,
+    totalHoldSeconds: row.total_hold_seconds || 0,
+    bestRepsSession: badgeFromRow(row.best_reps_value, row.best_reps_at),
+    bestHoldSession: badgeFromRow(row.best_hold_value, row.best_hold_at),
+    hasAccess: !!row.has_access,
+  };
+}
+
+function profileToRow(p) {
+  const iso = b => (b ? new Date(b.ts).toISOString() : null);
+  return {
+    nickname: p.nickname || null,
+    total_reps: p.totalReps,
+    total_hold_seconds: p.totalHoldSeconds,
+    best_reps_value: p.bestRepsSession ? p.bestRepsSession.value : null,
+    best_reps_at: iso(p.bestRepsSession),
+    best_hold_value: p.bestHoldSession ? p.bestHoldSession.value : null,
+    best_hold_at: iso(p.bestHoldSession),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function cacheProfile() {
+  if (authUser && profile) storageSet(PROFILE_CACHE_KEY, JSON.stringify({ userId: authUser.id, profile }));
+}
+
+function readCachedProfile(userId) {
   try {
-    const raw = localStorage.getItem(PROFILE_KEY);
-    if (!raw) return null;
-    const p = JSON.parse(raw);
-    if (!p.nickname) return null;
-    p.totalReps = p.totalReps || 0;
-    p.totalHoldSeconds = p.totalHoldSeconds || 0;
-    p.bestRepsSession = p.bestRepsSession || null;
-    p.bestHoldSession = p.bestHoldSession || null;
-    return p;
+    const c = JSON.parse(storageGet(PROFILE_CACHE_KEY));
+    return c && c.userId === userId ? c.profile : null;
   } catch (e) { return null; }
 }
 
-function saveProfile() {
-  localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+async function pushProfile() {
+  if (!authUser || !profile) return false;
+  const { error } = await sb.from('profiles').update(profileToRow(profile)).eq('id', authUser.id);
+  profileSyncPending = !!error;
+  if (error) console.error('Profile sync failed:', error);
+  return !error;
 }
 
-let profile = loadProfile();
+// Saves locally right away, then syncs to the server; a failed sync retries on the next save or reconnect
+function saveProfile() {
+  cacheProfile();
+  pushProfile();
+}
+window.addEventListener('online', () => { if (profileSyncPending) pushProfile(); });
+
+async function fetchProfileRow(userId) {
+  const { data, error } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+function readLegacyProfile() {
+  try {
+    const p = JSON.parse(storageGet(LEGACY_PROFILE_KEY));
+    if (!p) return null;
+    return {
+      nickname: p.nickname || '',
+      totalReps: p.totalReps || 0,
+      totalHoldSeconds: p.totalHoldSeconds || 0,
+      bestRepsSession: p.bestRepsSession || null,
+      bestHoldSession: p.bestHoldSession || null,
+    };
+  } catch (e) { return null; }
+}
+
+// Prefer the badge that still counts this month, then the higher value
+function betterBadge(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  const aActive = badgeIsActive(a), bActive = badgeIsActive(b);
+  if (aActive !== bActive) return aActive ? a : b;
+  return b.value > a.value ? b : a;
+}
+
+// One-time move of pre-account progress into the first account signed in on this device
+async function migrateLegacyProgress() {
+  if (storageGet(MIGRATED_KEY)) return;
+  const legacy = readLegacyProfile();
+  if (!legacy) return;
+  profile.totalReps = Math.max(profile.totalReps, legacy.totalReps);
+  profile.totalHoldSeconds = Math.max(profile.totalHoldSeconds, legacy.totalHoldSeconds);
+  profile.bestRepsSession = betterBadge(profile.bestRepsSession, legacy.bestRepsSession);
+  profile.bestHoldSession = betterBadge(profile.bestHoldSession, legacy.bestHoldSession);
+  if (!profile.nickname && legacy.nickname) profile.nickname = legacy.nickname.slice(0, 24);
+  if (await pushProfile()) storageSet(MIGRATED_KEY, authUser.id);
+}
+
+async function onSignedIn(user) {
+  authUser = user;
+  showOverlayScreen('boot-screen');
+  $('boot-msg').textContent = t('bootLoading');
+  $('boot-retry-btn').hidden = true;
+
+  let row = null;
+  try {
+    row = await fetchProfileRow(user.id);
+    // The signup trigger creates the row; give it a moment on a brand-new account
+    if (!row) { await new Promise(r => setTimeout(r, 800)); row = await fetchProfileRow(user.id); }
+  } catch (err) {
+    console.error(err);
+  }
+
+  if (row) {
+    profile = rowToProfile(row);
+    await migrateLegacyProgress();
+  } else {
+    profile = readCachedProfile(user.id);
+    if (!profile) {
+      $('boot-msg').textContent = t('bootError');
+      $('boot-retry-btn').hidden = false;
+      return;
+    }
+  }
+  cacheProfile();
+  showOverlayScreen(profile.nickname ? 'menu-screen' : 'nickname-screen');
+}
+
+function showLoginForm(errorKey) {
+  $('login-form').hidden = false;
+  $('login-sent').hidden = true;
+  $('login-error').textContent = errorKey ? t(errorKey) : '';
+  $('login-send-btn').disabled = false;
+  $('login-send-btn').textContent = t('loginSend');
+  showOverlayScreen('login-screen');
+}
+
+async function onLoginSubmit() {
+  const email = $('login-email').value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { $('login-email').focus(); return; }
+
+  const btn = $('login-send-btn');
+  btn.disabled = true;
+  btn.textContent = t('loginSending');
+  $('login-error').textContent = '';
+
+  const { error } = await sb.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: location.origin + location.pathname,
+      data: { referred_by: storageGet(REF_KEY) },
+    },
+  });
+
+  btn.disabled = false;
+  btn.textContent = t('loginSend');
+  if (error) {
+    console.error(error);
+    $('login-error').textContent = t(error.status === 429 ? 'loginRateLimited' : 'loginError');
+    return;
+  }
+  $('login-form').hidden = true;
+  $('login-sent').hidden = false;
+  $('login-sent-text').textContent = t('loginSent')(email);
+}
+
+async function signOut() {
+  gameActive = false;
+  $('game-view').style.display = 'none';
+  await sb.auth.signOut();
+  storageRemove(PROFILE_CACHE_KEY);
+  authUser = null;
+  profile = null;
+  showLoginForm();
+}
 
 // ===================== STATE =====================
 let sessionMode = 'reps'; // 'reps' | 'hold' | 'technique'
@@ -1337,7 +1589,7 @@ const ctx    = canvas.getContext('2d');
 const ingameMenuOverlay = $('ingame-menu-overlay');
 
 // ===================== NAVIGATION =====================
-const OVERLAY_SCREENS = ['nickname-screen', 'menu-screen', 'mode-screen', 'instr-screen', 'profile-screen'];
+const OVERLAY_SCREENS = ['boot-screen', 'login-screen', 'nickname-screen', 'menu-screen', 'mode-screen', 'instr-screen', 'profile-screen'];
 
 function showOverlayScreen(id) {
   OVERLAY_SCREENS.forEach(s => $(s).classList.remove('show'));
@@ -1385,6 +1637,7 @@ function badgeIsActive(badge) {
 
 function renderProfile() {
   $('profile-name').textContent = profile.nickname;
+  $('profile-email').textContent = authUser ? authUser.email : '';
 
   const points = profile.totalReps + profile.totalHoldSeconds;
   const rank = getRank(points);
@@ -1455,7 +1708,7 @@ function onNicknameConfirm() {
     $('nickname-input').focus();
     return;
   }
-  profile = { nickname: name, totalReps: 0, totalHoldSeconds: 0, bestRepsSession: null, bestHoldSession: null };
+  profile.nickname = name;
   saveProfile();
   showOverlayScreen('menu-screen');
 }
@@ -2004,6 +2257,13 @@ function applyLanguage(lang) {
   });
 
   $('nickname-hint').textContent = t('nicknameHint');
+  $('login-hint').textContent = t('loginHint');
+  $('login-email').placeholder = t('loginPlaceholder');
+  $('login-send-btn').textContent = t('loginSend');
+  $('login-other-btn').textContent = t('loginOtherEmail');
+  $('boot-msg').textContent = t('bootLoading');
+  $('boot-retry-btn').textContent = t('bootRetry');
+  $('profile-logout-btn').textContent = t('btnLogout');
   $('nickname-input').placeholder = t('nicknamePlaceholder');
   $('nickname-confirm-btn').textContent = t('btnContinue');
 
@@ -2459,13 +2719,25 @@ function drawRecFrame(image) {
 }
 
 // ===================== BOOT =====================
-applyLanguage(LANG);
+async function boot() {
+  applyLanguage(LANG);
+  captureReferral();
+  showOverlayScreen('boot-screen');
 
-if (profile) {
-  showOverlayScreen('menu-screen');
-} else {
-  showOverlayScreen('nickname-screen');
+  sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' && session && (!authUser || authUser.id !== session.user.id)) onSignedIn(session.user);
+    if (event === 'SIGNED_OUT' && authUser) { authUser = null; profile = null; showLoginForm(); }
+  });
+
+  const { data: { session } } = await sb.auth.getSession();
+  if (authErrorInUrl) history.replaceState(null, '', location.pathname + location.search);
+  if (session) {
+    if (!authUser) onSignedIn(session.user);
+  } else {
+    showLoginForm(authErrorInUrl ? 'loginLinkExpired' : null);
+  }
 }
+boot();
 </script>
 </body>
 </html>
