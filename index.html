@@ -496,6 +496,20 @@
     color: #ccc;
     line-height: 1.5;
   }
+  .result-save-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    background: #4caf50;
+    color: #0a0a0f;
+    border: none;
+    padding: 16px 28px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .result-save-btn:disabled { background: #2e4a2f; color: #8fbf91; }
+  .result-save-btn:active { transform: scale(0.96); }
+  #rec-btn.ready { border-color: #4caf50; color: #4caf50; }
+
   .result-menu-btn {
     font-family: 'Press Start 2P', monospace;
     font-size: 10px;
@@ -825,7 +839,7 @@
   <button class="big-btn" id="menu-play-btn" onclick="showOverlayScreen('mode-screen')"></button>
   <button class="big-btn secondary" id="menu-profile-btn" onclick="openProfile('menu')"></button>
   <button class="big-btn secondary" id="menu-instr-btn" onclick="openInstructions('menu')"></button>
-  <div id="app-version">v0.10</div>
+  <div id="app-version">v0.11</div>
 </div>
 
 <!-- MODE SELECT -->
@@ -984,6 +998,7 @@
     <div id="tech-res-issue-label"></div>
     <div id="tech-res-tip"></div>
   </div>
+  <button class="result-save-btn" id="tech-res-save-btn" hidden onclick="shareLastVideo()"></button>
   <button id="tech-res-btn" onclick="nextRoundTechnique()"></button>
   <button class="result-menu-btn" id="tech-res-menu-btn" onclick="goMenuFromResult()"></button>
 </div>
@@ -1002,6 +1017,7 @@
     <div id="result-rankup-icon" style="width:28px;height:28px;"></div>
     <span id="result-rankup-text"></span>
   </div>
+  <button class="result-save-btn" id="result-save-btn" hidden onclick="shareLastVideo()"></button>
   <button id="next-btn" onclick="nextRound()"></button>
   <button class="result-menu-btn" id="result-menu-btn" onclick="goMenuFromResult()"></button>
 </div>
@@ -1237,6 +1253,13 @@ const STRINGS = {
     uploadHint: 'Не закрывай экран — это займёт примерно столько же, сколько длится видео.',
     uploadCancel: 'ОТМЕНА',
     uploadFailed: 'Не получилось открыть видео. Попробуй другой файл.',
+    uploadRendering: 'СОЗДАЮ ВИДЕО',
+    uploadTooLong: 'Видео длиннее 90 секунд. Обрежь его в Фото и загрузи снова.',
+    uploadRenderFailed: 'Анализ готов, но видео собрать не получилось. Попробуй ещё раз.',
+    saveVideo: 'СОХРАНИТЬ ВИДЕО',
+    savePreparing: 'ГОТОВИМ ВИДЕО...',
+    cardPerfect: 'ИДЕАЛЬНАЯ ФОРМА',
+    cardNoStance: 'СТОЙКА НЕ НАЙДЕНА',
     statRecord: 'рекорд',
     statPoints: 'очки',
     statRank: 'ранг',
@@ -1339,6 +1362,13 @@ const STRINGS = {
     uploadHint: 'Keep the screen on — this takes about as long as the video.',
     uploadCancel: 'CANCEL',
     uploadFailed: "Couldn't open this video. Try another file.",
+    uploadRendering: 'CREATING VIDEO',
+    uploadTooLong: 'This video is longer than 90 seconds. Trim it in Photos and upload again.',
+    uploadRenderFailed: "Analysis is done, but the video couldn't be created. Please try again.",
+    saveVideo: 'SAVE VIDEO',
+    savePreparing: 'PREPARING VIDEO...',
+    cardPerfect: 'PERFECT FORM',
+    cardNoStance: 'NO HANDSTAND FOUND',
     statRecord: 'record',
     statPoints: 'points',
     statRank: 'rank',
@@ -1711,6 +1741,7 @@ function resumeFromIngameMenu() {
 }
 
 function goMainMenuFromGame() {
+  stopLiveRecording(null);
   closeIngameMenu();
   gameActive = false;
   $('game-view').style.display = 'none';
@@ -1808,6 +1839,13 @@ function finalizeSession() {
   const rankedUp = rankAfter.id !== rankBefore.id;
 
   showResult(value, isNewRecord, rankedUp ? rankAfter : null);
+  stopLiveRecording({
+    label: sessionMode === 'reps' ? t('sessionLabelReps') : t('sessionLabelHold'),
+    big: String(value),
+    unit: sessionMode === 'reps' ? t('resultUnitReps') : t('resultUnitHold'),
+    sub: isNewRecord ? t('newRecord') : '',
+    line: rankedUp ? t('rankUp')(rankLabel(rankAfter)) : '',
+  });
 }
 
 function showResult(value, isNewRecord, rankedUpTo) {
@@ -1832,9 +1870,11 @@ function showResult(value, isNewRecord, rankedUpTo) {
 
   $('next-btn').textContent = t('nextBtn');
   resultOverlay.classList.add('show');
+  updateSaveButtons();
 }
 
 function goMenuFromResult() {
+  stopLiveRecording(null);
   resultOverlay.classList.remove('show');
   $('technique-result-overlay').classList.remove('show');
   gameActive = false;
@@ -2149,9 +2189,9 @@ function coverTransform() {
   return { s, dx: (canvas.width - vw * s) / 2, dy: (canvas.height - vh * s) / 2 };
 }
 
-function drawSkeleton(c, lm, px, py) {
+function drawSkeleton(c, lm, px, py, k = 1) {
   c.strokeStyle = '#c080ff55';
-  c.lineWidth = 3;
+  c.lineWidth = 3 * k;
   c.beginPath();
   for (const [a, b] of BODY_CONNECTIONS) { c.moveTo(px(a), py(a)); c.lineTo(px(b), py(b)); }
   c.stroke();
@@ -2159,7 +2199,7 @@ function drawSkeleton(c, lm, px, py) {
   c.fillStyle = '#c080ff';
   for (let i = 11; i < lm.length; i++) {
     c.beginPath();
-    c.arc(px(i), py(i), 4, 0, Math.PI * 2);
+    c.arc(px(i), py(i), 4 * k, 0, Math.PI * 2);
     c.fill();
   }
 }
@@ -2195,7 +2235,8 @@ function angle3(a, b, c) {
 
 // Key body landmarks (shoulders, hips, ankles, wrists) must be visible
 function isBodyVisible(lm) {
-  return [11, 12, 23, 24, 27, 28, 15, 16].every(i => lm[i] && (lm[i].visibility ?? 1) > 0.4);
+  const vis = i => (lm[i] ? lm[i].visibility ?? 1 : 0);
+  return [[11, 12], [23, 24], [27, 28], [15, 16]].every(([a, b]) => Math.max(vis(a), vis(b)) > 0.4);
 }
 
 function isInverted(lm) {
@@ -2302,6 +2343,7 @@ function applyLanguage(lang) {
 
   $('mode-title').textContent = t('modeTitle');
   $('mode-technique-btn').textContent = t('modeTechnique');
+  updateSaveButtons();
   $('tech-res-menu-btn').textContent = t('btnToMenu');
   $('result-menu-btn').textContent = t('btnToMenu');
   $('mode-upload-btn').textContent = t('modeUpload');
@@ -2392,7 +2434,7 @@ function analyzeForm(lm) {
 
 function stopTechnique() {
   gameActive = false;
-  finalizeTechnique();
+  stopLiveRecording(finalizeTechnique());
 }
 
 function nextRoundTechnique() {
@@ -2401,10 +2443,13 @@ function nextRoundTechnique() {
   selectMode('technique');
 }
 
+// Shows the Technique result screen and returns the data for the video result card
 function finalizeTechnique() {
   const totalMs = techGoodMs + techBadMs;
   $('technique-result-overlay').classList.add('show');
   $('tech-res-title').textContent = t('techResTitle');
+  updateSaveButtons();
+  const card = { label: t('sessionLabelTechnique'), big: '—', unit: '', sub: '', line: '' };
 
   if (totalMs < 1500) {
     $('tech-res-score').textContent = '—';
@@ -2413,7 +2458,8 @@ function finalizeTechnique() {
     $('tech-res-issue-label').textContent = '';
     $('tech-res-tip').textContent = totalMs === 0 ? t('techResNotSeen') : t('techResTooShort');
     $('tech-res-btn').textContent = t('techResAgain');
-    return;
+    card.sub = t('cardNoStance');
+    return card;
   }
 
   const pct = Math.round(techGoodMs / totalMs * 100);
@@ -2424,14 +2470,19 @@ function finalizeTechnique() {
   // Find the issue that took the most time
   const topIssue = Object.entries(techIssueMs).sort((a,b) => b[1]-a[1]).find(([,ms]) => ms > 500)?.[0] || null;
 
+  card.big = pct + '%';
+  card.sub = t('techResGrade')(pct);
   if (pct >= 80 || !topIssue) {
     $('tech-res-issue-label').textContent = '';
     $('tech-res-tip').textContent = t('techResPerfect');
+    card.line = t('cardPerfect');
   } else {
     $('tech-res-issue-label').textContent = t('techResMainIssue')(t('techIssues')[topIssue]);
     $('tech-res-tip').textContent = t('techTips')[topIssue];
+    card.line = t('techResMainIssue')(t('techIssues')[topIssue]);
   }
   $('tech-res-btn').textContent = t('techResAgain');
+  return card;
 }
 
 // ===================== VIDEO UPLOAD ANALYSIS =====================
@@ -2455,8 +2506,24 @@ function setUploadProgress(frac) {
 
 function cancelUpload() { uploadCancelled = true; }
 
+// Resolves once the frame at t is decoded; time-boxed so a missing iOS event can't hang analysis
 function seekTo(v, t) {
-  return new Promise(resolve => { v.onseeked = () => resolve(); v.currentTime = t; });
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    const timer = setTimeout(finish, 1500);
+    v.onseeked = () => {
+      v.onseeked = null;
+      clearTimeout(timer);
+      if (v.requestVideoFrameCallback) {
+        v.requestVideoFrameCallback(finish);
+        setTimeout(finish, 250);
+      } else {
+        finish();
+      }
+    };
+    v.currentTime = t;
+  });
 }
 
 function drawUploadFrame(v, lm) {
@@ -2470,6 +2537,133 @@ function drawUploadFrame(v, lm) {
   if (lm) drawSkeleton(cx, lm, i => lm[i].x * s + dx, i => lm[i].y * s + dy);
 }
 
+const MAX_UPLOAD_S = 90;
+
+function setUploadStage(titleKey) { $('upload-title').textContent = t(titleKey); }
+
+// Pass 1: step through the clip, run tracking + form analysis, keep a per-sample timeline
+async function analyzeUploadedVideo(uv) {
+  const dur = uv.duration;
+  const samples = [];
+  let invertedSince = null;
+  let stanceMs = 0;
+  lmFilters = null;
+
+  for (let i = 0; i * UPLOAD_STEP_S < dur && !uploadCancelled; i++) {
+    const t = i * UPLOAD_STEP_S;
+    await seekTo(uv, Math.max(t, 0.001));
+    const raw = await detectOnce(uv);
+    let lm = null;
+    if (raw) lm = smoothLandmarks(raw, uv.videoWidth, uv.videoHeight, t);
+    else lmFilters = null;
+    drawUploadFrame(uv, lm);
+
+    const sample = { t, lm, visible: false, inStance: false, good: false, issue: null, stanceMs };
+    if (lm && isBodyVisible(lm)) {
+      sample.visible = true;
+      if (isInverted(lm)) {
+        if (invertedSince === null) invertedSince = t;
+        if (t - invertedSince >= HANDSTAND_CONFIRM_MS / 1000) {
+          const form = techAccumulate(lm, UPLOAD_STEP_S * 1000);
+          stanceMs += UPLOAD_STEP_S * 1000;
+          Object.assign(sample, { inStance: true, good: form.isGood, issue: form.mainIssue, stanceMs });
+        }
+      } else {
+        invertedSince = null;
+      }
+    } else {
+      invertedSince = null;
+    }
+    samples.push(sample);
+    setUploadProgress((t / dur) * 0.5);
+  }
+  return samples;
+}
+
+function lerpLandmarks(a, b, f) {
+  if (!a || !b) return a || b;
+  return a.map((p, i) => ({ x: p.x + (b[i].x - p.x) * f, y: p.y + (b[i].y - p.y) * f, visibility: p.visibility }));
+}
+
+function sampleAt(samples, t) {
+  const pos = Math.min(Math.max(t / UPLOAD_STEP_S, 0), samples.length - 1);
+  const i0 = Math.floor(pos), i1 = Math.min(i0 + 1, samples.length - 1);
+  const s0 = samples[i0];
+  return { ...s0, lm: lerpLandmarks(s0.lm, samples[i1].lm, pos - i0) };
+}
+
+function uploadHudData(smp) {
+  let pill;
+  if (smp.inStance) pill = smp.good ? { text: t('statusTechGood'), cls: 'pill-detecting' }
+    : { text: t('statusTechBad')(t('techIssues')[smp.issue] || ''), cls: 'pill-handstand' };
+  else if (smp.visible) pill = { text: t('statusDetecting'), cls: 'pill-detecting' };
+  else pill = { text: t('statusWaiting'), cls: 'pill-waiting' };
+  return {
+    label: t('sessionLabelTechnique'),
+    value: String(Math.floor(smp.stanceMs / 1000)),
+    unit: t('sessionUnitHold'),
+    pill,
+    stats: null,
+  };
+}
+
+function previewRecCanvas() {
+  const c = $('upload-canvas'), cx = c.getContext('2d');
+  const cw = window.innerWidth, ch = window.innerHeight;
+  if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
+  const s = Math.min(cw / recCanvas.width, ch / recCanvas.height);
+  cx.clearRect(0, 0, cw, ch);
+  cx.drawImage(recCanvas, (cw - recCanvas.width * s) / 2, (ch - recCanvas.height * s) / 2, recCanvas.width * s, recCanvas.height * s);
+}
+
+// Pass 2: play the clip in real time and record it with the skeleton, HUD and a closing result card
+function renderUploadedVideo(uv, samples, card) {
+  return new Promise((resolve, reject) => {
+    // Fixed iPhone-width layout so the exported clip looks the same from any device
+    const k = recCanvas.width / 390;
+    const dur = uv.duration;
+    let finished = false, cardStart = null, lastTime = -1, stuckSince = performance.now();
+
+    const rec = createRecorder(file => resolve(uploadCancelled ? null : file));
+
+    const drawVideoFrame = () => {
+      drawVideoCover(recCtx, uv, false);
+      dimRec();
+      const smp = sampleAt(samples, uv.currentTime);
+      if (smp.lm) drawSkeletonOnRec(smp.lm, uv.videoWidth, uv.videoHeight, false, k, false);
+      drawHud(recCtx, uploadHudData(smp), k);
+    };
+
+    const tick = () => {
+      if (uploadCancelled) { finished = true; uv.pause(); rec.stop(); return; }
+      if (cardStart === null) {
+        drawVideoFrame();
+        if (uv.currentTime !== lastTime) { lastTime = uv.currentTime; stuckSince = performance.now(); }
+        setUploadProgress(0.5 + Math.min(uv.currentTime / dur, 1) * 0.5);
+        // Playback ended, or stalled for 3s: move on to the result card
+        if (uv.ended || performance.now() - stuckSince > 3000) { uv.pause(); cardStart = performance.now(); }
+      } else {
+        drawVideoCover(recCtx, uv, false);
+        dimRec();
+        const elapsed = performance.now() - cardStart;
+        drawResultCard(recCtx, card, Math.min(1, elapsed / 300));
+        if (elapsed >= REC_CARD_MS) { finished = true; rec.stop(); return; }
+      }
+      previewRecCanvas();
+      requestAnimationFrame(tick);
+    };
+
+    seekTo(uv, 0.001).then(() => {
+      drawVideoFrame();
+      rec.start(1000);
+      uv.play().then(() => requestAnimationFrame(tick)).catch(err => {
+        if (!finished) { finished = true; rec.stop(); }
+        reject(err);
+      });
+    });
+  });
+}
+
 async function onVideoPicked(input) {
   const file = input.files && input.files[0];
   input.value = '';
@@ -2479,17 +2673,20 @@ async function onVideoPicked(input) {
   const url = URL.createObjectURL(file);
   hideOverlayScreens();
   $('upload-overlay').classList.add('show');
+  setUploadStage('uploadAnalyzing');
   setUploadProgress(0);
   sessionMode = 'technique';
   techSource = 'upload';
   resetTechTotals();
+  lastVideo = null;
   uploadCancelled = false;
   uploadActive = true;
 
   let wakeLock = null;
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) {}
 
-  let failed = false;
+  let errorKey = null;
+  let card = null;
   try {
     uv.src = url;
     await new Promise((resolve, reject) => {
@@ -2500,92 +2697,158 @@ async function onVideoPicked(input) {
     try { await uv.play(); } catch (e) {}
     uv.pause();
     if (!isFinite(uv.duration) || uv.duration <= 0) throw new Error('unknown video duration');
+    if (uv.duration > MAX_UPLOAD_S) { errorKey = 'uploadTooLong'; throw new Error('video too long'); }
 
     await ensurePoseEngine();
-    lmFilters = null;
-    const dur = uv.duration;
-    let invertedSince = null;
+    const samples = await analyzeUploadedVideo(uv);
 
-    for (let t = 0; t < dur && !uploadCancelled; t += UPLOAD_STEP_S) {
-      await seekTo(uv, t);
-      const raw = await detectOnce(uv);
-      let lm = null;
-      if (raw) lm = smoothLandmarks(raw, uv.videoWidth, uv.videoHeight, t);
-      else lmFilters = null;
-      drawUploadFrame(uv, lm);
-
-      if (lm && isBodyVisible(lm) && isInverted(lm)) {
-        if (invertedSince === null) invertedSince = t;
-        if (t - invertedSince >= HANDSTAND_CONFIRM_MS / 1000) techAccumulate(lm, UPLOAD_STEP_S * 1000);
-      } else {
-        invertedSince = null;
+    if (!uploadCancelled) {
+      card = finalizeTechnique();
+      $('technique-result-overlay').classList.remove('show');
+      setUploadStage('uploadRendering');
+      try {
+        lastVideo = await renderUploadedVideo(uv, samples, card);
+      } catch (err) {
+        console.error(err);
+        errorKey = 'uploadRenderFailed';
       }
-      setUploadProgress(t / dur);
     }
   } catch (err) {
     console.error(err);
-    failed = true;
+    errorKey = errorKey || 'uploadFailed';
   }
 
   uploadActive = false;
   lmFilters = null;
+  uv.pause();
   uv.removeAttribute('src');
   uv.load();
   URL.revokeObjectURL(url);
   if (wakeLock) wakeLock.release().catch(() => {});
   $('upload-overlay').classList.remove('show');
 
-  if (uploadCancelled) { showOverlayScreen('mode-screen'); return; }
+  if (uploadCancelled) { lastVideo = null; showOverlayScreen('mode-screen'); return; }
   finalizeTechnique();
-  if (failed) $('tech-res-tip').textContent = t('uploadFailed');
+  if (errorKey) $('tech-res-tip').textContent = t(errorKey);
 }
 
 // ===================== RECORDING =====================
-let mediaRecorder = null;
-let recChunks = [];
 const recCanvas = document.createElement('canvas');
 recCanvas.width = 1080;
 recCanvas.height = 1920;
 const recCtx = recCanvas.getContext('2d');
+const REC_CARD_MS = 2500;
+const APP_URL_LABEL = 'errikko.github.io/handstand-fighter';
+
+let mediaRecorder = null;          // live recording
+let recState = 'idle';             // idle | recording | finishing | ready
+let recCard = null;                // { data, startedAt } while the result card is appended
+let lastVideo = null;              // File of the most recent finished recording
+
+const PILL_STYLES = {
+  'pill-waiting':   { bg: 'rgba(40,40,60,0.85)', color: '#888888', border: '#333333' },
+  'pill-detecting': { bg: 'rgba(10,40,10,0.85)', color: '#4caf50', border: '#4caf5066' },
+  'pill-handstand': { bg: 'rgba(60,40,0,0.85)',  color: '#f0c040', border: '#f0c04066' },
+  'pill-active':    { bg: 'rgba(40,0,80,0.85)',  color: '#c080ff', border: '#c080ff66' },
+};
+
+function pickMimeType() {
+  if (typeof MediaRecorder === 'undefined') return '';
+  return ['video/mp4', 'video/webm;codecs=h264', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m)) || '';
+}
+
+function createRecorder(onDone) {
+  const stream = recCanvas.captureStream(30);
+  const mimeType = pickMimeType();
+  const options = { videoBitsPerSecond: 10_000_000 };
+  if (mimeType) options.mimeType = mimeType;
+  const rec = new MediaRecorder(stream, options);
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+  rec.onstop = () => {
+    stream.getTracks().forEach(tr => tr.stop());
+    const type = rec.mimeType || mimeType || 'video/mp4';
+    const ext = type.includes('mp4') ? 'mp4' : 'webm';
+    onDone(new File(chunks, `handstand-fighter-${Date.now()}.${ext}`, { type }));
+  };
+  return rec;
+}
+
+// Size factor between the phone screen layout (CSS px) and the 1080px-wide recording
+function recScale() { return recCanvas.width / window.innerWidth; }
 
 function toggleRecording() {
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
-    mediaRecorder.stop();
-  } else {
-    startRecording();
-  }
+  if (recState === 'recording') stopLiveRecording(null);
+  else if (recState === 'ready') shareLastVideo();
+  else if (recState === 'idle') startLiveRecording();
 }
 
-function startRecording() {
-  recChunks = [];
-  const stream = recCanvas.captureStream(30);
-  const mimeType = ['video/mp4', 'video/webm;codecs=h264', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
-  const recOptions = { videoBitsPerSecond: 10_000_000 };
-  if (mimeType) recOptions.mimeType = mimeType;
-  mediaRecorder = new MediaRecorder(stream, recOptions);
-  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recChunks.push(e.data); };
-  mediaRecorder.onstop = () => {
-    const blob = new Blob(recChunks, { type: mediaRecorder.mimeType || 'video/webm' });
-    const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `handstand-${Date.now()}.${ext}`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setRecUI(false);
-  };
-  mediaRecorder.start();
-  setRecUI(true);
+function startLiveRecording() {
+  lastVideo = null;
+  recCard = null;
+  mediaRecorder = createRecorder(file => {
+    lastVideo = file;
+    mediaRecorder = null;
+    recCard = null;
+    setRecState('ready');
+  });
+  mediaRecorder.start(1000);
+  setRecState('recording');
 }
 
-function setRecUI(active) {
+// cardData: append a result card before stopping; null stops right away
+function stopLiveRecording(cardData) {
+  if (recState !== 'recording' || !mediaRecorder) return;
+  setRecState('finishing');
+  if (!cardData) { mediaRecorder.stop(); return; }
+  recCard = { data: cardData, startedAt: performance.now() };
+  const rec = mediaRecorder;
+  setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, REC_CARD_MS);
+}
+
+function setRecState(state) {
+  recState = state;
   const btn = $('rec-btn');
-  btn.classList.toggle('recording', active);
-  $('rec-label').textContent = active ? 'STOP' : 'REC';
+  btn.classList.toggle('recording', state === 'recording');
+  btn.classList.toggle('ready', state === 'ready');
+  $('rec-label').textContent = { idle: 'REC', recording: 'STOP', finishing: '...', ready: 'SAVE' }[state];
+  updateSaveButtons();
 }
 
-// Helper: rounded rectangle path
+function updateSaveButtons() {
+  const preparing = recState === 'finishing';
+  ['tech-res-save-btn', 'result-save-btn'].forEach(id => {
+    const btn = $(id);
+    btn.hidden = !lastVideo && !preparing;
+    btn.disabled = preparing || !lastVideo;
+    btn.textContent = preparing ? t('savePreparing') : t('saveVideo');
+  });
+}
+
+// Share sheet lets iOS save straight to Photos or post to Instagram; falls back to a download
+async function shareLastVideo() {
+  if (!lastVideo) return;
+  if (navigator.canShare && navigator.canShare({ files: [lastVideo] })) {
+    try {
+      await navigator.share({ files: [lastVideo] });
+      if (recState === 'ready') setRecState('idle');
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      console.error(err);
+    }
+  }
+  const url = URL.createObjectURL(lastVideo);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = lastVideo.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  if (recState === 'ready') setRecState('idle');
+}
+
 function recRoundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -2600,153 +2863,215 @@ function recRoundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// Called each frame from renderLoop — composites video + skeleton + HUD onto recCanvas at 1080x1920
-function drawRecFrame(image) {
-  if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
+function recCover(vw, vh) {
+  const s = Math.max(recCanvas.width / vw, recCanvas.height / vh);
+  return { s, dx: (recCanvas.width - vw * s) / 2, dy: (recCanvas.height - vh * s) / 2 };
+}
 
-  const RW = recCanvas.width;   // 1080
-  const RH = recCanvas.height;  // 1920
-  // Scale factors relative to the display canvas dimensions
-  const scX = RW / canvas.width;
-  const scY = RH / canvas.height;
+function drawVideoCover(c, v, mirrored) {
+  const vw = v.videoWidth || 1280, vh = v.videoHeight || 720;
+  const { s, dx, dy } = recCover(vw, vh);
+  c.save();
+  if (mirrored) { c.translate(recCanvas.width, 0); c.scale(-1, 1); }
+  c.drawImage(v, dx, dy, vw * s, vh * s);
+  c.restore();
+}
 
-  // 1. Draw video (object-fit: cover)
-  const vw = image.videoWidth || 1280, vh = image.videoHeight || 720;
-  const vs = Math.max(RW / vw, RH / vh);
-  recCtx.save();
-  if (isMirrored) { recCtx.translate(RW, 0); recCtx.scale(-1, 1); }
-  recCtx.drawImage(image, (RW - vw*vs)/2, (RH - vh*vs)/2, vw*vs, vh*vs);
-  recCtx.restore();
+function dimRec() {
+  recCtx.fillStyle = 'rgba(0,0,0,0.3)';
+  recCtx.fillRect(0, 0, recCanvas.width, recCanvas.height);
+}
 
-  // 2. Draw skeleton (copy from display canvas, scaled up)
-  recCtx.drawImage(canvas, 0, 0, RW, RH);
-
-  // 3. Draw HUD -------------------------------------------------------
-  recCtx.save();
-
-  // Padding mirrors the DOM (56px top, 28px sides, 72px bottom on display CSS)
-  const padTop  = 56  * scY;
-  const padSide = 28  * scX;
-  const padBot  = 72  * scY;
-
-  // -- Session card (top-left) --
-  const modeLabel = $('session-mode-label').textContent;
-  const valText   = $('session-value').textContent;
-  const unitText  = $('session-unit').textContent;
-
-  const cardPadX = 12 * scX, cardPadY = 7 * scY;
-  const labelSize = Math.round(9  * scX);
-  const valSize   = Math.round(22 * scX);
-  const unitSize  = Math.round(11 * scX);
-  const rowGap    = 3  * scY;
-
-  recCtx.font = `${labelSize}px 'Press Start 2P', monospace`;
-  const labelW = recCtx.measureText(modeLabel).width;
-  recCtx.font = `${valSize}px 'Press Start 2P', monospace`;
-  const valW = recCtx.measureText(valText).width;
-  recCtx.font = `${unitSize}px Inter, sans-serif`;
-  const unitW = unitText ? recCtx.measureText(unitText).width + 7*scX : 0;
-
-  const innerW   = Math.max(labelW, valW + unitW);
-  const cardW    = innerW + cardPadX * 2;
-  const cardH    = cardPadY + labelSize + rowGap + valSize + cardPadY;
-  const cardX    = padSide, cardY = padTop;
-
-  recCtx.fillStyle = 'rgba(0,0,0,0.65)';
-  recRoundRect(recCtx, cardX, cardY, cardW, cardH, 10 * scX);
-  recCtx.fill();
-  recCtx.strokeStyle = '#c080ff44';
-  recCtx.lineWidth = Math.max(1, scX);
-  recRoundRect(recCtx, cardX, cardY, cardW, cardH, 10 * scX);
-  recCtx.stroke();
-
-  // Mode label
-  recCtx.font = `${labelSize}px 'Press Start 2P', monospace`;
-  recCtx.fillStyle = '#c080ff';
-  recCtx.fillText(modeLabel, cardX + cardPadX, cardY + cardPadY + labelSize);
-
-  // Value
-  const valY = cardY + cardPadY + labelSize + rowGap + valSize;
-  recCtx.font = `${valSize}px 'Press Start 2P', monospace`;
-  recCtx.fillStyle = '#ffffff';
-  recCtx.shadowColor = '#c080ff88';
-  recCtx.shadowBlur = 16 * scX;
-  recCtx.fillText(valText, cardX + cardPadX, valY);
-  recCtx.shadowBlur = 0;
-
-  // Unit
-  if (unitText) {
-    recCtx.font = `${unitSize}px Inter, sans-serif`;
-    recCtx.fillStyle = '#888888';
-    recCtx.fillText(unitText, cardX + cardPadX + valW + 7*scX, valY);
+// Skeleton mapped through the recording's own cover crop, so it stays on the body
+function drawSkeletonOnRec(lm, vw, vh, mirrored, k, showAngle) {
+  const { s, dx, dy } = recCover(vw, vh);
+  const px = i => { const x = lm[i].x * s + dx; return mirrored ? recCanvas.width - x : x; };
+  const py = i => lm[i].y * s + dy;
+  drawSkeleton(recCtx, lm, px, py, k);
+  if (showAngle && angleLabel) {
+    recCtx.font = `bold ${Math.round(20 * k)}px Inter`;
+    recCtx.fillStyle = angleLabel.color;
+    recCtx.fillText(angleLabel.value + '°', px(13) + 8 * k, py(13));
   }
+}
 
-  // -- Status pill --
-  const pillEl   = $('status-pill');
-  const pillText = pillEl.textContent.trim();
-  if (pillText) {
-    const cs = window.getComputedStyle(pillEl);
-    const pillSize = Math.round(10 * scX);
-    recCtx.font = `bold ${pillSize}px Inter, sans-serif`;
-    const pillTW  = recCtx.measureText(pillText).width;
-    const pillPX  = 12 * scX, pillPY = 5 * scY;
-    const pillW   = pillTW + pillPX * 2;
-    const pillH   = pillSize + pillPY * 2;
-    const pillX   = padSide;
-    const pillY   = cardY + cardH + 8 * scY;
-
-    recCtx.fillStyle = cs.backgroundColor;
-    recRoundRect(recCtx, pillX, pillY, pillW, pillH, pillH / 2);
-    recCtx.fill();
-    recCtx.strokeStyle = cs.borderTopColor;
-    recCtx.lineWidth = Math.max(1, scX);
-    recRoundRect(recCtx, pillX, pillY, pillW, pillH, pillH / 2);
-    recCtx.stroke();
-
-    recCtx.fillStyle = cs.color;
-    recCtx.fillText(pillText, pillX + pillPX, pillY + pillPY + pillSize * 0.85);
-  }
-
-  // -- Bottom stat cards --
-  const statItems = [
+function liveHudData() {
+  const pillCls = [...statusPill.classList].find(c => c.startsWith('pill-'));
+  const stats = $('hud-bottom').style.display === 'none' ? null : [
     { val: $('stat-record').textContent, lbl: $('stat-record-lbl').textContent },
     { val: $('stat-points').textContent, lbl: $('stat-points-lbl').textContent },
-    { val: $('stat-rank').textContent,   lbl: $('stat-rank-lbl').textContent   },
+    { val: $('stat-rank').textContent,   lbl: $('stat-rank-lbl').textContent },
   ];
-  const statValSize = Math.round(14 * scX);
-  const statLblSize = Math.round(8  * scX);
-  const statPadX = 10 * scX, statPadY = 6 * scY;
-  const statGap  = 8 * scX;
-  const statArea = RW - padSide * 2;
-  const statCardW = (statArea - statGap * 2) / 3;
-  const statCardH = statPadY + statValSize + 6*scY + statLblSize + statPadY;
-  const statBaseY = RH - padBot - statCardH;
+  return {
+    label: sessionModeLabelEl.textContent,
+    value: sessionValueEl.textContent,
+    unit: $('session-unit').textContent,
+    pill: { text: statusPill.textContent.trim(), cls: pillCls },
+    stats,
+  };
+}
 
-  statItems.forEach((item, i) => {
-    const sx2 = padSide + i * (statCardW + statGap);
+// Mirrors the on-screen HUD layout (56px top, 28px sides, 72px bottom) at recording scale
+function drawHud(c, hud, k) {
+  const W = recCanvas.width, H = recCanvas.height;
+  const padTop = 56 * k, padSide = 28 * k, padBot = 72 * k;
+  c.save();
 
-    recCtx.fillStyle = 'rgba(0,0,0,0.65)';
-    recRoundRect(recCtx, sx2, statBaseY, statCardW, statCardH, 8 * scX);
-    recCtx.fill();
-    recCtx.strokeStyle = '#ffffff15';
-    recCtx.lineWidth = Math.max(1, scX);
-    recRoundRect(recCtx, sx2, statBaseY, statCardW, statCardH, 8 * scX);
-    recCtx.stroke();
+  const cardPadX = 12 * k, cardPadY = 7 * k;
+  const labelSize = Math.round(9 * k), valSize = Math.round(22 * k), unitSize = Math.round(11 * k);
+  const rowGap = 3 * k;
+  c.font = `${labelSize}px 'Press Start 2P', monospace`;
+  const labelW = c.measureText(hud.label).width;
+  c.font = `${valSize}px 'Press Start 2P', monospace`;
+  const valW = c.measureText(hud.value).width;
+  c.font = `${unitSize}px Inter, sans-serif`;
+  const unitW = hud.unit ? c.measureText(hud.unit).width + 7 * k : 0;
 
-    // Value (purple)
-    recCtx.font = `${statValSize}px 'Press Start 2P', monospace`;
-    recCtx.fillStyle = '#c080ff';
-    const vw2 = recCtx.measureText(item.val).width;
-    recCtx.fillText(item.val, sx2 + statCardW/2 - vw2/2, statBaseY + statPadY + statValSize);
+  const cardW = Math.max(labelW, valW + unitW) + cardPadX * 2;
+  const cardH = cardPadY + labelSize + rowGap + valSize + cardPadY;
+  const cardX = padSide, cardY = padTop;
+  c.fillStyle = 'rgba(0,0,0,0.65)';
+  recRoundRect(c, cardX, cardY, cardW, cardH, 10 * k);
+  c.fill();
+  c.strokeStyle = '#c080ff44';
+  c.lineWidth = Math.max(1, k);
+  c.stroke();
 
-    // Label (grey)
-    recCtx.font = `${statLblSize}px 'Press Start 2P', monospace`;
-    recCtx.fillStyle = '#888888';
-    const lw2 = recCtx.measureText(item.lbl).width;
-    recCtx.fillText(item.lbl, sx2 + statCardW/2 - lw2/2, statBaseY + statPadY + statValSize + 6*scY + statLblSize);
-  });
+  c.font = `${labelSize}px 'Press Start 2P', monospace`;
+  c.fillStyle = '#c080ff';
+  c.fillText(hud.label, cardX + cardPadX, cardY + cardPadY + labelSize);
 
-  recCtx.restore();
+  const valY = cardY + cardPadY + labelSize + rowGap + valSize;
+  c.font = `${valSize}px 'Press Start 2P', monospace`;
+  c.fillStyle = '#ffffff';
+  c.shadowColor = '#c080ff88';
+  c.shadowBlur = 16 * k;
+  c.fillText(hud.value, cardX + cardPadX, valY);
+  c.shadowBlur = 0;
+  if (hud.unit) {
+    c.font = `${unitSize}px Inter, sans-serif`;
+    c.fillStyle = '#888888';
+    c.fillText(hud.unit, cardX + cardPadX + valW + 7 * k, valY);
+  }
+
+  if (hud.pill && hud.pill.text) {
+    const st = PILL_STYLES[hud.pill.cls] || PILL_STYLES['pill-waiting'];
+    const pillSize = Math.round(10 * k);
+    c.font = `bold ${pillSize}px Inter, sans-serif`;
+    const pillPX = 12 * k, pillPY = 5 * k;
+    const pillW = c.measureText(hud.pill.text).width + pillPX * 2;
+    const pillH = pillSize + pillPY * 2;
+    const pillY = cardY + cardH + 8 * k;
+    c.fillStyle = st.bg;
+    recRoundRect(c, padSide, pillY, pillW, pillH, pillH / 2);
+    c.fill();
+    c.strokeStyle = st.border;
+    c.stroke();
+    c.fillStyle = st.color;
+    c.fillText(hud.pill.text, padSide + pillPX, pillY + pillPY + pillSize * 0.85);
+  }
+
+  if (hud.stats) {
+    const statValSize = Math.round(11 * k), statLblSize = Math.round(8 * k);
+    const statPadY = 6 * k, statGap = 8 * k;
+    const statCardW = (W - padSide * 2 - statGap * 2) / 3;
+    const statCardH = statPadY + statValSize + 6 * k + statLblSize + statPadY;
+    const statY = H - padBot - statCardH;
+    hud.stats.forEach((item, i) => {
+      const x = padSide + i * (statCardW + statGap);
+      c.fillStyle = 'rgba(0,0,0,0.65)';
+      recRoundRect(c, x, statY, statCardW, statCardH, 8 * k);
+      c.fill();
+      c.strokeStyle = '#ffffff15';
+      c.stroke();
+      c.font = `${statValSize}px 'Press Start 2P', monospace`;
+      c.fillStyle = '#c080ff';
+      c.fillText(item.val, x + (statCardW - c.measureText(item.val).width) / 2, statY + statPadY + statValSize);
+      c.font = `${statLblSize}px 'Press Start 2P', monospace`;
+      c.fillStyle = '#888888';
+      c.fillText(item.lbl, x + (statCardW - c.measureText(item.lbl).width) / 2, statY + statPadY + statValSize + 6 * k + statLblSize);
+    });
+  }
+  c.restore();
+}
+
+function fillTextCentered(c, text, y, maxW, lineH) {
+  const words = text.split(' ');
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (c.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+    else line = test;
+  }
+  if (line) lines.push(line);
+  lines.forEach((l, i) => c.fillText(l, recCanvas.width / 2, y + i * lineH));
+}
+
+// Closing card appended to recordings: mode, score and where to get the app
+function drawResultCard(c, d, alpha) {
+  const W = recCanvas.width, H = recCanvas.height;
+  c.save();
+  c.fillStyle = `rgba(10,10,15,${0.88 * alpha})`;
+  c.fillRect(0, 0, W, H);
+  c.globalAlpha = alpha;
+  c.textAlign = 'center';
+
+  c.font = `44px 'Press Start 2P', monospace`;
+  c.fillStyle = '#f0c040';
+  c.shadowColor = '#f0c04088';
+  c.shadowBlur = 30;
+  c.fillText('HANDSTAND FIGHTER', W / 2, 560);
+  c.shadowBlur = 0;
+
+  c.font = `36px 'Press Start 2P', monospace`;
+  c.fillStyle = '#c080ff';
+  c.fillText(d.label, W / 2, 780);
+
+  c.font = `${d.big.length > 4 ? 150 : 190}px 'Press Start 2P', monospace`;
+  c.fillStyle = '#ffffff';
+  c.shadowColor = '#c080ff';
+  c.shadowBlur = 50;
+  c.fillText(d.big, W / 2, 1050);
+  c.shadowBlur = 0;
+
+  let y = 1160;
+  if (d.unit) {
+    c.font = `600 44px Inter, sans-serif`;
+    c.fillStyle = '#aaaaaa';
+    c.fillText(d.unit, W / 2, y);
+    y += 90;
+  }
+  if (d.sub) {
+    c.font = `40px 'Press Start 2P', monospace`;
+    c.fillStyle = '#f0c040';
+    c.fillText(d.sub, W / 2, y);
+    y += 90;
+  }
+  if (d.line) {
+    c.font = `600 42px Inter, sans-serif`;
+    c.fillStyle = '#dddddd';
+    fillTextCentered(c, d.line, y, 860, 56);
+  }
+
+  c.font = `600 34px Inter, sans-serif`;
+  c.fillStyle = '#888888';
+  c.fillText(APP_URL_LABEL, W / 2, 1640);
+  c.restore();
+}
+
+// Called each frame from renderLoop while a live recording is running
+function drawRecFrame(image) {
+  if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
+  const k = recScale();
+  drawVideoCover(recCtx, image, isMirrored);
+  dimRec();
+  if (latestLm) drawSkeletonOnRec(latestLm, image.videoWidth, image.videoHeight, isMirrored, k, true);
+  if (recCard) {
+    drawResultCard(recCtx, recCard.data, Math.min(1, (performance.now() - recCard.startedAt) / 300));
+    return;
+  }
+  drawHud(recCtx, liveHudData(), k);
 }
 
 // ===================== BOOT =====================
