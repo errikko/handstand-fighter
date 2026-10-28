@@ -1256,6 +1256,7 @@ const STRINGS = {
     uploadRendering: 'СОЗДАЮ ВИДЕО',
     uploadTooLong: 'Видео длиннее 90 секунд. Обрежь его в Фото и загрузи снова.',
     uploadRenderFailed: 'Анализ готов, но видео собрать не получилось. Попробуй ещё раз.',
+    uploadInterrupted: 'Анализ готов, но видео не собралось: приложение свернули. Не закрывай экран, пока создаётся видео, и попробуй ещё раз.',
     saveVideo: 'СОХРАНИТЬ ВИДЕО',
     savePreparing: 'ГОТОВИМ ВИДЕО...',
     cardPerfect: 'ИДЕАЛЬНАЯ ФОРМА',
@@ -1365,6 +1366,7 @@ const STRINGS = {
     uploadRendering: 'CREATING VIDEO',
     uploadTooLong: 'This video is longer than 90 seconds. Trim it in Photos and upload again.',
     uploadRenderFailed: "Analysis is done, but the video couldn't be created. Please try again.",
+    uploadInterrupted: "Analysis is done, but the video wasn't finished because the app was minimized. Keep the screen on while the video is created and try again.",
     saveVideo: 'SAVE VIDEO',
     savePreparing: 'PREPARING VIDEO...',
     cardPerfect: 'PERFECT FORM',
@@ -2425,7 +2427,9 @@ function analyzeForm(lm) {
   const issues = [];
   if (hipDev > 10)          issues.push({ id: 'banana',    sev: hipDev });
   if (verticalAngle > 20)   issues.push({ id: 'vertical',  sev: verticalAngle });
-  if (shoulderDev > 8)      issues.push({ id: 'shoulders', sev: shoulderDev });
+  // Shoulders travel past the wrists during a push-up, so only judge them on straight arms
+  const elbowAngle = angle3(s.shoulder, mid(13, 14), s.wrist);
+  if (elbowAngle > 150 && shoulderDev > 12) issues.push({ id: 'shoulders', sev: shoulderDev });
   if (kneeAngle < 165)      issues.push({ id: 'knees',     sev: 165 - kneeAngle });
   issues.sort((a, b) => b.sev - a.sev);
 
@@ -2622,9 +2626,9 @@ function renderUploadedVideo(uv, samples, card) {
     // Fixed iPhone-width layout so the exported clip looks the same from any device
     const k = recCanvas.width / 390;
     const dur = uv.duration;
-    let finished = false, cardStart = null, lastTime = -1, stuckSince = performance.now();
+    let finished = false, interrupted = false, cardStart = null, lastTime = -1, stuckSince = performance.now();
 
-    const rec = createRecorder(file => resolve(uploadCancelled ? null : file));
+    const rec = createRecorder(file => { if (!interrupted) resolve(uploadCancelled ? null : file); });
 
     const drawVideoFrame = () => {
       drawVideoCover(recCtx, uv, false);
@@ -2635,7 +2639,14 @@ function renderUploadedVideo(uv, samples, card) {
     };
 
     const tick = () => {
+      if (finished) return;
       if (uploadCancelled) { finished = true; uv.pause(); rec.stop(); return; }
+      // Leaving the app pauses playback; abort rather than export a truncated clip
+      if (document.hidden) {
+        finished = true; interrupted = true; uv.pause(); rec.stop();
+        reject(new Error('interrupted'));
+        return;
+      }
       if (cardStart === null) {
         drawVideoFrame();
         if (uv.currentTime !== lastTime) { lastTime = uv.currentTime; stuckSince = performance.now(); }
@@ -2650,16 +2661,21 @@ function renderUploadedVideo(uv, samples, card) {
         if (elapsed >= REC_CARD_MS) { finished = true; rec.stop(); return; }
       }
       previewRecCanvas();
-      requestAnimationFrame(tick);
+      // A timer rather than requestAnimationFrame: rAF stops when the page isn't painted
+      setTimeout(tick, 1000 / 30);
     };
 
     seekTo(uv, 0.001).then(() => {
       drawVideoFrame();
       rec.start(1000);
-      uv.play().then(() => requestAnimationFrame(tick)).catch(err => {
+      let started = false;
+      const start = () => { if (!started) { started = true; stuckSince = performance.now(); tick(); } };
+      uv.play().then(start).catch(err => {
         if (!finished) { finished = true; rec.stop(); }
         reject(err);
       });
+      // play() can stay pending in the background; the stall watchdog takes over from here
+      setTimeout(start, 3000);
     });
   });
 }
@@ -2710,7 +2726,7 @@ async function onVideoPicked(input) {
         lastVideo = await renderUploadedVideo(uv, samples, card);
       } catch (err) {
         console.error(err);
-        errorKey = 'uploadRenderFailed';
+        errorKey = err.message === 'interrupted' ? 'uploadInterrupted' : 'uploadRenderFailed';
       }
     }
   } catch (err) {
