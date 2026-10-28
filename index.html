@@ -496,6 +496,18 @@
     color: #ccc;
     line-height: 1.5;
   }
+  .result-menu-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    background: transparent;
+    color: #aaa;
+    border: 1px solid #ffffff33;
+    padding: 14px 28px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .result-menu-btn:active { transform: scale(0.96); }
+
   #tech-res-btn {
     font-family: 'Press Start 2P', monospace;
     font-size: 11px;
@@ -813,7 +825,7 @@
   <button class="big-btn" id="menu-play-btn" onclick="showOverlayScreen('mode-screen')"></button>
   <button class="big-btn secondary" id="menu-profile-btn" onclick="openProfile('menu')"></button>
   <button class="big-btn secondary" id="menu-instr-btn" onclick="openInstructions('menu')"></button>
-  <div id="app-version">v0.9</div>
+  <div id="app-version">v0.10</div>
 </div>
 
 <!-- MODE SELECT -->
@@ -973,6 +985,7 @@
     <div id="tech-res-tip"></div>
   </div>
   <button id="tech-res-btn" onclick="nextRoundTechnique()"></button>
+  <button class="result-menu-btn" id="tech-res-menu-btn" onclick="goMenuFromResult()"></button>
 </div>
 
 <!-- RESULT -->
@@ -990,6 +1003,7 @@
     <span id="result-rankup-text"></span>
   </div>
   <button id="next-btn" onclick="nextRound()"></button>
+  <button class="result-menu-btn" id="result-menu-btn" onclick="goMenuFromResult()"></button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -1197,7 +1211,8 @@ const STRINGS = {
     sessionUnitReps: '',
     sessionUnitHold: 'сек',
     sessionUnitTechnique: '%',
-    techStopBtn: 'СТОП',
+    techStopBtn: 'ЗАВЕРШИТЬ',
+    btnToMenu: 'В МЕНЮ',
     techIssues: {
       banana:    'БАНАН (ПРОГИБ)',
       vertical:  'НАКЛОН ТЕЛА',
@@ -1298,7 +1313,8 @@ const STRINGS = {
     sessionUnitReps: '',
     sessionUnitHold: 'sec',
     sessionUnitTechnique: '%',
-    techStopBtn: 'STOP',
+    techStopBtn: 'FINISH',
+    btnToMenu: 'MAIN MENU',
     techIssues: {
       banana:    'BANANA (ARCH)',
       vertical:  'BODY TILT',
@@ -1818,6 +1834,14 @@ function showResult(value, isNewRecord, rankedUpTo) {
   resultOverlay.classList.add('show');
 }
 
+function goMenuFromResult() {
+  resultOverlay.classList.remove('show');
+  $('technique-result-overlay').classList.remove('show');
+  gameActive = false;
+  $('game-view').style.display = 'none';
+  showOverlayScreen('menu-screen');
+}
+
 function nextRound() {
   resultOverlay.classList.remove('show');
   resetSessionCounters();
@@ -1956,6 +1980,8 @@ const BODY_CONNECTIONS = [
 let poseLandmarker = null; // main-thread fallback
 let poseWorker = null;     // preferred: inference off the main thread
 let workerBusy = false;
+let workerBusySince = 0;
+const WORKER_STALL_MS = 1000;
 let latestLm = null;     // smoothed landmarks in video pixel space
 let lastVideoTime = -1;
 let angleLabel = null;   // { value, color } for the reps elbow angle readout
@@ -2024,8 +2050,9 @@ let detectResolver = null;
 // One-off detection on an arbitrary frame source (used by video upload analysis)
 async function detectOnce(src) {
   if (poseWorker) {
-    while (workerBusy) await new Promise(r => setTimeout(r, 10));
+    while (workerBusy && performance.now() - workerBusySince < WORKER_STALL_MS) await new Promise(r => setTimeout(r, 10));
     workerBusy = true;
+    workerBusySince = performance.now();
     let bitmap;
     try { bitmap = await createImageBitmap(src); }
     catch (err) { workerBusy = false; throw err; }
@@ -2066,8 +2093,10 @@ function handleLandmarks(raw) {
 
 function requestDetection() {
   if (poseWorker) {
-    if (workerBusy) return;
+    // A frame lost mid-flight (e.g. while switching cameras) must not stall tracking forever
+    if (workerBusy && performance.now() - workerBusySince < WORKER_STALL_MS) return;
     workerBusy = true;
+    workerBusySince = performance.now();
     lastVideoTime = video.currentTime;
     createImageBitmap(video)
       .then(bitmap => poseWorker.postMessage({ type: 'frame', bitmap, ts: performance.now() }, [bitmap]))
@@ -2273,6 +2302,8 @@ function applyLanguage(lang) {
 
   $('mode-title').textContent = t('modeTitle');
   $('mode-technique-btn').textContent = t('modeTechnique');
+  $('tech-res-menu-btn').textContent = t('btnToMenu');
+  $('result-menu-btn').textContent = t('btnToMenu');
   $('mode-upload-btn').textContent = t('modeUpload');
   $('upload-title').textContent = t('uploadAnalyzing');
   $('upload-hint').textContent = t('uploadHint');
