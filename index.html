@@ -101,7 +101,15 @@
     color: #888;
   }
 
-  #kebab-btn {
+  #hud-btn-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #video.mirrored { transform: scaleX(-1); }
+
+  .hud-round-btn {
     flex-shrink: 0;
     width: 34px;
     height: 34px;
@@ -114,7 +122,8 @@
     cursor: pointer;
     backdrop-filter: blur(6px);
   }
-  #kebab-btn:active { transform: scale(0.94); }
+  .hud-round-btn:active { transform: scale(0.94); }
+  #flip-btn:disabled { opacity: 0.5; }
 
   #rec-btn {
     flex-shrink: 0;
@@ -733,7 +742,7 @@
   <button class="big-btn" id="menu-play-btn" onclick="showOverlayScreen('mode-screen')"></button>
   <button class="big-btn secondary" id="menu-profile-btn" onclick="openProfile('menu')"></button>
   <button class="big-btn secondary" id="menu-instr-btn" onclick="openInstructions('menu')"></button>
-  <div id="app-version">v0.6</div>
+  <div id="app-version">v0.7</div>
 </div>
 
 <!-- MODE SELECT -->
@@ -813,8 +822,11 @@
           <span id="session-unit"></span>
         </div>
       </div>
-      <button id="rec-btn" onclick="toggleRecording()"><span id="rec-dot"></span><span id="rec-label">REC</span></button>
-      <button id="kebab-btn" onclick="openIngameMenu()">⋮</button>
+      <div id="hud-btn-group">
+        <button id="rec-btn" onclick="toggleRecording()"><span id="rec-dot"></span><span id="rec-label">REC</span></button>
+        <button id="flip-btn" class="hud-round-btn" onclick="switchCamera()">⟲</button>
+        <button id="kebab-btn" class="hud-round-btn" onclick="openIngameMenu()">⋮</button>
+      </div>
     </div>
     <span class="status-pill pill-waiting" id="status-pill"></span>
   </div>
@@ -1556,18 +1568,7 @@ function goPlay() {
 
   const engineReady = initPoseEngine();
 
-  const tryCamera = (constraints) =>
-    navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
-  const quality = { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } };
-
-  tryCamera({ facingMode: { exact: 'environment' }, ...quality })
-    .catch(() => tryCamera({ facingMode: 'environment', ...quality }))
-    .catch(() => tryCamera(quality))
-    .then(stream => {
-      video.srcObject = stream;
-      return new Promise(resolve => { video.onloadedmetadata = resolve; });
-    })
-    .then(() => video.play())
+  openCamera(cameraFacing)
     .then(() => engineReady)
     .then(() => {
       hideOverlayScreens();
@@ -1582,6 +1583,49 @@ function goPlay() {
       $('loading-msg').textContent = t('noCameraAccess');
       console.error(err);
     });
+}
+
+// ===================== CAMERA =====================
+let cameraFacing = localStorage.getItem('hf_facing') === 'user' ? 'user' : 'environment';
+let isMirrored = false;
+
+function openCamera(facing) {
+  const tryCamera = (constraints) =>
+    navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
+  const quality = { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } };
+
+  return tryCamera({ facingMode: { exact: facing }, ...quality })
+    .catch(() => tryCamera({ facingMode: facing, ...quality }))
+    .catch(() => tryCamera(quality))
+    .then(stream => {
+      if (video.srcObject) video.srcObject.getTracks().forEach(tr => tr.stop());
+      video.srcObject = stream;
+      const settings = stream.getVideoTracks()[0].getSettings();
+      isMirrored = (settings.facingMode || facing) === 'user';
+      video.classList.toggle('mirrored', isMirrored);
+      return new Promise(resolve => { video.onloadedmetadata = resolve; });
+    })
+    .then(() => video.play());
+}
+
+async function switchCamera() {
+  const btn = $('flip-btn');
+  btn.disabled = true;
+  const next = cameraFacing === 'user' ? 'environment' : 'user';
+  // iOS allows only one active camera, so release the current one first
+  if (video.srcObject) video.srcObject.getTracks().forEach(tr => tr.stop());
+  try {
+    await openCamera(next);
+    cameraFacing = next;
+    localStorage.setItem('hf_facing', next);
+  } catch (err) {
+    console.error(err);
+    await openCamera(cameraFacing).catch(console.error);
+  }
+  latestLm = null;
+  lmFilters = null;
+  lastVideoTime = -1;
+  btn.disabled = false;
 }
 
 // ===================== POSE ENGINE (MediaPipe Tasks) =====================
@@ -1742,7 +1786,8 @@ function drawOverlay(lm) {
   if (!lm) return;
 
   const { s, dx, dy } = coverTransform();
-  const px = i => lm[i].x * s + dx, py = i => lm[i].y * s + dy;
+  const px = i => { const x = lm[i].x * s + dx; return isMirrored ? canvas.width - x : x; };
+  const py = i => lm[i].y * s + dy;
 
   ctx.strokeStyle = '#c080ff55';
   ctx.lineWidth = 3;
@@ -2072,7 +2117,10 @@ function drawRecFrame(image) {
   // 1. Draw video (object-fit: cover)
   const vw = image.videoWidth || 1280, vh = image.videoHeight || 720;
   const vs = Math.max(RW / vw, RH / vh);
+  recCtx.save();
+  if (isMirrored) { recCtx.translate(RW, 0); recCtx.scale(-1, 1); }
   recCtx.drawImage(image, (RW - vw*vs)/2, (RH - vh*vs)/2, vw*vs, vh*vs);
+  recCtx.restore();
 
   // 2. Draw skeleton (copy from display canvas, scaled up)
   recCtx.drawImage(canvas, 0, 0, RW, RH);
