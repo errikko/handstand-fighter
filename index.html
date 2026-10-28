@@ -397,6 +397,40 @@
   }
   #technique-stop-btn:active { transform: scale(0.96); }
 
+  /* ===== VIDEO UPLOAD ANALYSIS ===== */
+  #upload-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #0a0a0f;
+    z-index: 90;
+  }
+  #upload-overlay.show { display: block; }
+  /* Rendered but invisible: iOS won't decode frames of a display:none video */
+  #upload-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  #upload-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #upload-panel {
+    position: absolute;
+    left: 0; right: 0;
+    bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+    padding: 0 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+    background: rgba(0,0,0,0.7);
+    border-radius: 14px;
+    margin: 0 16px;
+    padding: 18px 20px;
+    backdrop-filter: blur(6px);
+  }
+  #upload-title { font-family: 'Press Start 2P', monospace; font-size: 11px; color: #c080ff; letter-spacing: 1px; }
+  #upload-bar { width: 100%; max-width: 320px; height: 6px; background: #ffffff22; border-radius: 3px; overflow: hidden; }
+  #upload-bar-fill { height: 100%; width: 0; background: #c080ff; transition: width 0.2s; }
+  #upload-pct { font-family: 'Press Start 2P', monospace; font-size: 14px; color: #fff; }
+  #upload-hint { font-size: 12px; color: #999; max-width: 300px; line-height: 1.4; }
+
   /* ===== TECHNIQUE RESULT ===== */
   #technique-result-overlay {
     display: none;
@@ -742,13 +776,15 @@
   <button class="big-btn" id="menu-play-btn" onclick="showOverlayScreen('mode-screen')"></button>
   <button class="big-btn secondary" id="menu-profile-btn" onclick="openProfile('menu')"></button>
   <button class="big-btn secondary" id="menu-instr-btn" onclick="openInstructions('menu')"></button>
-  <div id="app-version">v0.7</div>
+  <div id="app-version">v0.8</div>
 </div>
 
 <!-- MODE SELECT -->
 <div id="mode-screen" class="menu-screen">
   <div class="screen-title" id="mode-title"></div>
   <button class="big-btn" id="mode-technique-btn" onclick="selectMode('technique')"></button>
+  <button class="big-btn" id="mode-upload-btn" onclick="$('upload-input').click()"></button>
+  <input type="file" id="upload-input" accept="video/*" hidden onchange="onVideoPicked(this)">
   <button class="big-btn" id="mode-reps-btn" onclick="selectMode('reps')"></button>
   <button class="big-btn" id="mode-hold-btn" onclick="selectMode('hold')"></button>
   <button class="big-btn secondary" id="mode-back-btn" onclick="showOverlayScreen('menu-screen')"></button>
@@ -871,6 +907,19 @@
   <div id="countdown-msg"></div>
   <div id="countdown-num">5</div>
   <div id="countdown-sub"></div>
+</div>
+
+<!-- VIDEO UPLOAD ANALYSIS -->
+<div id="upload-overlay">
+  <video id="upload-video" muted playsinline></video>
+  <canvas id="upload-canvas"></canvas>
+  <div id="upload-panel">
+    <div id="upload-title"></div>
+    <div id="upload-bar"><div id="upload-bar-fill"></div></div>
+    <div id="upload-pct">0%</div>
+    <div id="upload-hint"></div>
+    <button class="big-btn secondary" id="upload-cancel-btn" onclick="cancelUpload()"></button>
+  </div>
 </div>
 
 <!-- TECHNIQUE RESULT -->
@@ -1115,6 +1164,12 @@ const STRINGS = {
     techResMainIssue: issue => `Главное: ${issue}`,
     techResAgain: 'ЕЩЁ РАЗ ▶',
     techResTooShort: 'Слишком коротко — стой дольше для анализа',
+    techResNotSeen: 'Не увидел стойку. В кадре должно быть всё тело — от ладоней до носков, телефон сбоку.',
+    modeUpload: 'ТЕХНИКА: ИЗ ВИДЕО',
+    uploadAnalyzing: 'АНАЛИЗИРУЮ ВИДЕО',
+    uploadHint: 'Не закрывай экран — это займёт примерно столько же, сколько длится видео.',
+    uploadCancel: 'ОТМЕНА',
+    uploadFailed: 'Не получилось открыть видео. Попробуй другой файл.',
     statRecord: 'рекорд',
     statPoints: 'очки',
     statRank: 'ранг',
@@ -1197,6 +1252,12 @@ const STRINGS = {
     techResMainIssue: issue => `Main issue: ${issue}`,
     techResAgain: 'AGAIN ▶',
     techResTooShort: 'Too short — hold longer for analysis',
+    techResNotSeen: 'No handstand detected. Your whole body, hands to toes, must be in frame, phone to the side.',
+    modeUpload: 'TECHNIQUE: FROM VIDEO',
+    uploadAnalyzing: 'ANALYZING VIDEO',
+    uploadHint: 'Keep the screen on — this takes about as long as the video.',
+    uploadCancel: 'CANCEL',
+    uploadFailed: "Couldn't open this video. Try another file.",
     statRecord: 'record',
     statPoints: 'points',
     statRank: 'rank',
@@ -1254,6 +1315,7 @@ let techBadMs = 0;
 let techLastFrameTs = null;
 let techIssueMs = { banana: 0, vertical: 0, shoulders: 0, knees: 0 };
 let techCurrentIssue = null;
+let techSource = 'live'; // 'live' | 'upload'
 let cameraStarted = false;
 let returnTo = 'menu'; // where overlay screens (instructions/profile) should return to
 let pausedGameActive = false;
@@ -1401,6 +1463,7 @@ function onNicknameConfirm() {
 // ===================== MODE / SESSION =====================
 function selectMode(mode) {
   sessionMode = mode;
+  techSource = 'live';
   goPlay();
 }
 
@@ -1417,10 +1480,10 @@ function resetSessionCounters() {
   techIssueMs = { banana: 0, vertical: 0, shoulders: 0, knees: 0 };
   techCurrentIssue = null;
   const isTech = sessionMode === 'technique';
-  sessionValueEl.textContent = isTech ? '—' : '0';
+  sessionValueEl.textContent = '0';
   sessionModeLabelEl.textContent = isTech ? t('sessionLabelTechnique')
     : sessionMode === 'reps' ? t('sessionLabelReps') : t('sessionLabelHold');
-  $('session-unit').textContent = isTech ? '' : sessionMode === 'reps' ? t('sessionUnitReps') : t('sessionUnitHold');
+  $('session-unit').textContent = sessionMode === 'reps' ? t('sessionUnitReps') : t('sessionUnitHold');
   $('technique-stop-wrap').classList.toggle('show', isTech);
   $('hud-bottom').style.display = isTech ? 'none' : '';
   if (isTech) $('technique-stop-btn').textContent = t('techStopBtn');
@@ -1566,7 +1629,7 @@ function goPlay() {
   showOverlayScreen('instr-screen');
   $('instr-back-btn').style.display = 'none';
 
-  const engineReady = initPoseEngine();
+  const engineReady = ensurePoseEngine();
 
   openCamera(cameraFacing)
     .then(() => engineReady)
@@ -1698,12 +1761,37 @@ function startPoseWorker() {
   });
 }
 
+let engineReadyPromise = null;
+function ensurePoseEngine() {
+  if (!engineReadyPromise) engineReadyPromise = initPoseEngine();
+  return engineReadyPromise;
+}
+
+let detectResolver = null;
+// One-off detection on an arbitrary frame source (used by video upload analysis)
+async function detectOnce(src) {
+  if (poseWorker) {
+    while (workerBusy) await new Promise(r => setTimeout(r, 10));
+    workerBusy = true;
+    let bitmap;
+    try { bitmap = await createImageBitmap(src); }
+    catch (err) { workerBusy = false; throw err; }
+    return new Promise(resolve => {
+      detectResolver = resolve;
+      poseWorker.postMessage({ type: 'frame', bitmap, ts: performance.now() }, [bitmap]);
+    });
+  }
+  const res = poseLandmarker.detectForVideo(src, performance.now());
+  return (res.landmarks && res.landmarks[0]) || null;
+}
+
 async function initPoseEngine() {
   try {
     poseWorker = await startPoseWorker();
     poseWorker.onmessage = e => {
       if (e.data.type !== 'result') return;
       workerBusy = false;
+      if (detectResolver) { const resolve = detectResolver; detectResolver = null; resolve(e.data.landmarks); return; }
       handleLandmarks(e.data.landmarks);
     };
   } catch (err) {
@@ -1765,7 +1853,7 @@ function renderLoop() {
   const cw = window.innerWidth, ch = window.innerHeight;
   if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
 
-  if (video.readyState >= 2 && video.currentTime !== lastVideoTime) requestDetection();
+  if (!uploadActive && video.readyState >= 2 && video.currentTime !== lastVideoTime) requestDetection();
 
   drawOverlay(latestLm);
   drawRecFrame(video);
@@ -1779,6 +1867,21 @@ function coverTransform() {
   return { s, dx: (canvas.width - vw * s) / 2, dy: (canvas.height - vh * s) / 2 };
 }
 
+function drawSkeleton(c, lm, px, py) {
+  c.strokeStyle = '#c080ff55';
+  c.lineWidth = 3;
+  c.beginPath();
+  for (const [a, b] of BODY_CONNECTIONS) { c.moveTo(px(a), py(a)); c.lineTo(px(b), py(b)); }
+  c.stroke();
+
+  c.fillStyle = '#c080ff';
+  for (let i = 11; i < lm.length; i++) {
+    c.beginPath();
+    c.arc(px(i), py(i), 4, 0, Math.PI * 2);
+    c.fill();
+  }
+}
+
 function drawOverlay(lm) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -1789,18 +1892,7 @@ function drawOverlay(lm) {
   const px = i => { const x = lm[i].x * s + dx; return isMirrored ? canvas.width - x : x; };
   const py = i => lm[i].y * s + dy;
 
-  ctx.strokeStyle = '#c080ff55';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  for (const [a, b] of BODY_CONNECTIONS) { ctx.moveTo(px(a), py(a)); ctx.lineTo(px(b), py(b)); }
-  ctx.stroke();
-
-  ctx.fillStyle = '#c080ff';
-  for (let i = 11; i < lm.length; i++) {
-    ctx.beginPath();
-    ctx.arc(px(i), py(i), 4, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  drawSkeleton(ctx, lm, px, py);
 
   if (angleLabel) {
     ctx.font = 'bold 20px Inter';
@@ -1819,6 +1911,16 @@ function angle3(a, b, c) {
   return Math.acos(Math.min(1,Math.max(-1,dot/mag))) * 180/Math.PI;
 }
 
+// Key body landmarks (shoulders, hips, ankles, wrists) must be visible
+function isBodyVisible(lm) {
+  return [11, 12, 23, 24, 27, 28, 15, 16].every(i => lm[i] && (lm[i].visibility ?? 1) > 0.4);
+}
+
+function isInverted(lm) {
+  const avgY = (a, b) => (lm[a].y + lm[b].y) / 2;
+  return avgY(27, 28) < avgY(11, 12) && avgY(15, 16) > avgY(23, 24);
+}
+
 // lm: smoothed landmarks in video pixel space (keeps angles/ratios undistorted)
 function processPose(lm) {
   angleLabel = null;
@@ -1828,10 +1930,7 @@ function processPose(lm) {
     return;
   }
 
-  // Require key body landmarks visible (shoulders, hips, ankles, wrists)
-  const keyIds = [11, 12, 23, 24, 27, 28, 15, 16];
-  const bodyVisible = keyIds.every(i => lm[i] && (lm[i].visibility ?? 1) > 0.4);
-  if (!bodyVisible) {
+  if (!isBodyVisible(lm)) {
     if (gameActive) setStatus('waiting');
     return;
   }
@@ -1843,15 +1942,8 @@ function processPose(lm) {
   const lShoulder = lm[11], rShoulder = lm[12];
   const lElbow = lm[13], rElbow = lm[14];
   const lWrist = lm[15], rWrist = lm[16];
-  const lHip = lm[23], rHip = lm[24];
-  const lAnkle = lm[27], rAnkle = lm[28];
 
-  const wristY   = (lWrist.y  + rWrist.y)   / 2;
-  const ankleY   = (lAnkle.y  + rAnkle.y)   / 2;
-  const hipY     = (lHip.y    + rHip.y)     / 2;
-  const shoulderY= (lShoulder.y + rShoulder.y) / 2;
-
-  const inverted = ankleY < shoulderY && wristY > hipY;
+  const inverted = isInverted(lm);
 
   if (inverted) {
     if (!handstandStartTime) handstandStartTime = Date.now();
@@ -1877,24 +1969,15 @@ function processPose(lm) {
 
   if (isHandstand && sessionMode === 'technique') {
     const now = Date.now();
-    const dt = techLastFrameTs ? now - techLastFrameTs : 0;
+    // Cap the step so a tracking dropout isn't credited to the next frame in one lump
+    const dt = techLastFrameTs ? Math.min(now - techLastFrameTs, TECH_MAX_STEP_MS) : 0;
     techLastFrameTs = now;
 
-    const form = analyzeForm(lm);
-    techCurrentIssue = form.mainIssue;
+    const form = techAccumulate(lm, dt);
+    if (form.isGood) setStatus('techGood');
+    else setStatus('techBad', form.mainIssue);
 
-    if (form.isGood) {
-      techGoodMs += dt;
-      setStatus('techGood');
-    } else {
-      techBadMs += dt;
-      if (form.mainIssue) techIssueMs[form.mainIssue] = (techIssueMs[form.mainIssue] || 0) + dt;
-      setStatus('techBad', form.mainIssue);
-    }
-
-    const totalMs = techGoodMs + techBadMs;
-    const pct = totalMs > 0 ? Math.round(techGoodMs / totalMs * 100) : 0;
-    sessionValueEl.textContent = pct + '%';
+    sessionValueEl.textContent = Math.floor((techGoodMs + techBadMs) / 1000);
   }
 
   if (isHandstand && sessionMode === 'reps') {
@@ -1930,6 +2013,10 @@ function applyLanguage(lang) {
 
   $('mode-title').textContent = t('modeTitle');
   $('mode-technique-btn').textContent = t('modeTechnique');
+  $('mode-upload-btn').textContent = t('modeUpload');
+  $('upload-title').textContent = t('uploadAnalyzing');
+  $('upload-hint').textContent = t('uploadHint');
+  $('upload-cancel-btn').textContent = t('uploadCancel');
   $('mode-reps-btn').textContent = t('modeReps');
   $('mode-hold-btn').textContent = t('modeHold');
   $('mode-back-btn').textContent = t('btnBack');
@@ -1956,21 +2043,32 @@ function applyLanguage(lang) {
   if (cameraStarted) {
     const isTech = sessionMode === 'technique';
     sessionModeLabelEl.textContent = isTech ? t('sessionLabelTechnique') : sessionMode === 'reps' ? t('sessionLabelReps') : t('sessionLabelHold');
-    $('session-unit').textContent = isTech ? '' : sessionMode === 'reps' ? t('sessionUnitReps') : t('sessionUnitHold');
-    refreshHudStats();
+    $('session-unit').textContent = sessionMode === 'reps' ? t('sessionUnitReps') : t('sessionUnitHold');
+    if (!isTech) refreshHudStats();
     setStatus(lastStatus);
   }
   if ($('profile-screen').classList.contains('show')) renderProfile();
 }
 
 // ===================== TECHNIQUE MODE =====================
+const TECH_MAX_STEP_MS = 200;
+
+function techAccumulate(lm, dt) {
+  const form = analyzeForm(lm);
+  techCurrentIssue = form.mainIssue;
+  if (form.isGood) {
+    techGoodMs += dt;
+  } else {
+    techBadMs += dt;
+    if (form.mainIssue) techIssueMs[form.mainIssue] = (techIssueMs[form.mainIssue] || 0) + dt;
+  }
+  return form;
+}
+
 function analyzeForm(lm) {
-  // Pick the side with better visibility (profile view = one side dominant)
-  const lVis = (lm[11].visibility||0) + (lm[23].visibility||0) + (lm[27].visibility||0);
-  const rVis = (lm[12].visibility||0) + (lm[24].visibility||0) + (lm[28].visibility||0);
-  const s = lVis >= rVis
-    ? { shoulder: lm[11], hip: lm[23], knee: lm[25], ankle: lm[27], wrist: lm[15] }
-    : { shoulder: lm[12], hip: lm[24], knee: lm[26], ankle: lm[28], wrist: lm[16] };
+  // In profile the left/right halves overlap and the far side is noisy; averaging both is steadier
+  const mid = (a, b) => ({ x: (lm[a].x + lm[b].x) / 2, y: (lm[a].y + lm[b].y) / 2 });
+  const s = { shoulder: mid(11, 12), hip: mid(23, 24), knee: mid(25, 26), ankle: mid(27, 28), wrist: mid(15, 16) };
 
   // Vector from wrist to ankle (body axis)
   const bx = s.ankle.x - s.wrist.x, by = s.ankle.y - s.wrist.y;
@@ -2008,6 +2106,7 @@ function stopTechnique() {
 
 function nextRoundTechnique() {
   $('technique-result-overlay').classList.remove('show');
+  if (techSource === 'upload') { showOverlayScreen('mode-screen'); return; }
   selectMode('technique');
 }
 
@@ -2021,7 +2120,7 @@ function finalizeTechnique() {
     $('tech-res-score-pct').textContent = '';
     $('tech-res-score-lbl').textContent = '';
     $('tech-res-issue-label').textContent = '';
-    $('tech-res-tip').textContent = t('techResTooShort');
+    $('tech-res-tip').textContent = totalMs === 0 ? t('techResNotSeen') : t('techResTooShort');
     $('tech-res-btn').textContent = t('techResAgain');
     return;
   }
@@ -2042,6 +2141,112 @@ function finalizeTechnique() {
     $('tech-res-tip').textContent = t('techTips')[topIssue];
   }
   $('tech-res-btn').textContent = t('techResAgain');
+}
+
+// ===================== VIDEO UPLOAD ANALYSIS =====================
+const UPLOAD_STEP_S = 1 / 15;
+let uploadActive = false;
+let uploadCancelled = false;
+
+function resetTechTotals() {
+  techGoodMs = 0;
+  techBadMs = 0;
+  techLastFrameTs = null;
+  techIssueMs = { banana: 0, vertical: 0, shoulders: 0, knees: 0 };
+  techCurrentIssue = null;
+}
+
+function setUploadProgress(frac) {
+  const pct = Math.min(100, Math.round(frac * 100));
+  $('upload-bar-fill').style.width = pct + '%';
+  $('upload-pct').textContent = pct + '%';
+}
+
+function cancelUpload() { uploadCancelled = true; }
+
+function seekTo(v, t) {
+  return new Promise(resolve => { v.onseeked = () => resolve(); v.currentTime = t; });
+}
+
+function drawUploadFrame(v, lm) {
+  const c = $('upload-canvas'), cx = c.getContext('2d');
+  const cw = window.innerWidth, ch = window.innerHeight;
+  if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
+  const s = Math.min(cw / v.videoWidth, ch / v.videoHeight);
+  const dx = (cw - v.videoWidth * s) / 2, dy = (ch - v.videoHeight * s) / 2;
+  cx.clearRect(0, 0, cw, ch);
+  cx.drawImage(v, dx, dy, v.videoWidth * s, v.videoHeight * s);
+  if (lm) drawSkeleton(cx, lm, i => lm[i].x * s + dx, i => lm[i].y * s + dy);
+}
+
+async function onVideoPicked(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+
+  const uv = $('upload-video');
+  const url = URL.createObjectURL(file);
+  hideOverlayScreens();
+  $('upload-overlay').classList.add('show');
+  setUploadProgress(0);
+  sessionMode = 'technique';
+  techSource = 'upload';
+  resetTechTotals();
+  uploadCancelled = false;
+  uploadActive = true;
+
+  let wakeLock = null;
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) {}
+
+  let failed = false;
+  try {
+    uv.src = url;
+    await new Promise((resolve, reject) => {
+      uv.onloadedmetadata = resolve;
+      uv.onerror = () => reject(new Error('video decode failed'));
+    });
+    // Nudge iOS into decoding frames before we start seeking
+    try { await uv.play(); } catch (e) {}
+    uv.pause();
+    if (!isFinite(uv.duration) || uv.duration <= 0) throw new Error('unknown video duration');
+
+    await ensurePoseEngine();
+    lmFilters = null;
+    const dur = uv.duration;
+    let invertedSince = null;
+
+    for (let t = 0; t < dur && !uploadCancelled; t += UPLOAD_STEP_S) {
+      await seekTo(uv, t);
+      const raw = await detectOnce(uv);
+      let lm = null;
+      if (raw) lm = smoothLandmarks(raw, uv.videoWidth, uv.videoHeight, t);
+      else lmFilters = null;
+      drawUploadFrame(uv, lm);
+
+      if (lm && isBodyVisible(lm) && isInverted(lm)) {
+        if (invertedSince === null) invertedSince = t;
+        if (t - invertedSince >= HANDSTAND_CONFIRM_MS / 1000) techAccumulate(lm, UPLOAD_STEP_S * 1000);
+      } else {
+        invertedSince = null;
+      }
+      setUploadProgress(t / dur);
+    }
+  } catch (err) {
+    console.error(err);
+    failed = true;
+  }
+
+  uploadActive = false;
+  lmFilters = null;
+  uv.removeAttribute('src');
+  uv.load();
+  URL.revokeObjectURL(url);
+  if (wakeLock) wakeLock.release().catch(() => {});
+  $('upload-overlay').classList.remove('show');
+
+  if (uploadCancelled) { showOverlayScreen('mode-screen'); return; }
+  finalizeTechnique();
+  if (failed) $('tech-res-tip').textContent = t('uploadFailed');
 }
 
 // ===================== RECORDING =====================
