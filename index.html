@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Handstand Fighter</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0a0f">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="HS Fighter">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600&display=swap');
 
@@ -623,7 +631,45 @@
   }
 
   /* ===== NICKNAME SCREEN ===== */
-  #nickname-input, #login-email {
+  #install-hint {
+    position: fixed;
+    left: 16px; right: 16px;
+    bottom: calc(44px + env(safe-area-inset-bottom, 0px));
+    z-index: 250;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #15151f;
+    border: 1px solid #f0c04055;
+    border-radius: 12px;
+    padding: 12px 12px 12px 14px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+  #install-hint[hidden] { display: none; }
+  #install-hint-text { flex: 1; font-size: 12px; line-height: 1.45; color: #ddd; }
+  #install-hint-text b { color: #f0c040; font-weight: 600; }
+  #install-hint-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    background: #f0c040;
+    color: #0a0a0f;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  #install-hint-close {
+    background: none;
+    border: none;
+    color: #777;
+    font-size: 16px;
+    padding: 4px 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  #nickname-input, #login-email, #login-code {
     width: 100%;
     max-width: 340px;
     font-family: 'Inter', sans-serif;
@@ -636,7 +682,8 @@
     margin-bottom: 18px;
     text-align: center;
   }
-  #nickname-input:focus, #login-email:focus { outline: none; border-color: #f0c040; }
+  #nickname-input:focus, #login-email:focus, #login-code:focus { outline: none; border-color: #f0c040; }
+  #login-code { font-family: 'Press Start 2P', monospace; font-size: 20px; letter-spacing: 6px; }
   #login-hint, #login-sent-text, #boot-msg {
     font-size: 13px;
     color: #999;
@@ -791,6 +838,13 @@
 </head>
 <body>
 
+<!-- INSTALL HINT -->
+<div id="install-hint" hidden>
+  <div id="install-hint-text"></div>
+  <button id="install-hint-btn" hidden onclick="onInstallClick()"></button>
+  <button id="install-hint-close" onclick="dismissInstallHint()" aria-label="close">✕</button>
+</div>
+
 <!-- BOOT SCREEN -->
 <div id="boot-screen" class="menu-screen">
   <div class="screen-logo">HANDSTAND FIGHTER</div>
@@ -812,6 +866,8 @@
   </div>
   <div id="login-sent" hidden>
     <div id="login-sent-text"></div>
+    <input id="login-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000">
+    <button class="big-btn" id="login-code-btn" onclick="onCodeSubmit()"></button>
     <button class="big-btn secondary" id="login-other-btn" onclick="showLoginForm()"></button>
   </div>
   <div id="login-error"></div>
@@ -839,7 +895,7 @@
   <button class="big-btn" id="menu-play-btn" onclick="showOverlayScreen('mode-screen')"></button>
   <button class="big-btn secondary" id="menu-profile-btn" onclick="openProfile('menu')"></button>
   <button class="big-btn secondary" id="menu-instr-btn" onclick="openInstructions('menu')"></button>
-  <div id="app-version">v0.11</div>
+  <div id="app-version">v0.12</div>
 </div>
 
 <!-- MODE SELECT -->
@@ -1164,11 +1220,17 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const STRINGS = {
   ru: {
     nicknameHint: 'Придумай ник игрока — так тебя будут видеть в игре.',
-    loginHint: 'Войди по email — пришлём ссылку для входа. Пароль не нужен, прогресс сохранится в аккаунте.',
+    loginHint: 'Войди по email — пришлём код для входа. Пароль не нужен, прогресс сохранится в аккаунте.',
     loginPlaceholder: 'твой@email.com',
-    loginSend: 'ПОЛУЧИТЬ ССЫЛКУ',
+    loginSend: 'ПОЛУЧИТЬ КОД',
     loginSending: 'ОТПРАВЛЯЕМ...',
-    loginSent: email => `Ссылка для входа отправлена на ${email}. Открой письмо на этом телефоне и нажми на ссылку.`,
+    loginSent: email => `Письмо отправлено на ${email}. Введи код из письма — или нажми на ссылку в нём, если открываешь почту на этом же устройстве.`,
+    loginCodeBtn: 'ВОЙТИ',
+    loginCodeInvalid: 'Код не подошёл или устарел. Проверь цифры или запроси новый.',
+    installIOS: 'Добавь на главный экран: нажми <b>«Поделиться»</b> → <b>«На экран „Домой“»</b>. Приложение будет открываться на весь экран.',
+    installAndroid: 'Установи приложение — оно будет открываться с главного экрана на весь экран.',
+    installAndroidMenu: 'Добавь на главный экран: меню браузера <b>⋮</b> → <b>«Добавить на главный экран»</b>.',
+    installBtn: 'УСТАНОВИТЬ',
     loginOtherEmail: 'ДРУГОЙ EMAIL',
     loginError: 'Не получилось отправить письмо. Попробуй ещё раз.',
     loginRateLimited: 'Слишком много попыток. Подожди пару минут и попробуй снова.',
@@ -1274,11 +1336,17 @@ const STRINGS = {
   },
   en: {
     nicknameHint: 'Pick a player nickname — this is how you will appear in the game.',
-    loginHint: "Sign in with email — we'll send you a sign-in link. No password needed, your progress is saved to your account.",
+    loginHint: "Sign in with email — we'll send you a sign-in code. No password needed, your progress is saved to your account.",
     loginPlaceholder: 'you@email.com',
-    loginSend: 'GET SIGN-IN LINK',
+    loginSend: 'GET CODE',
     loginSending: 'SENDING...',
-    loginSent: email => `Sign-in link sent to ${email}. Open the email on this phone and tap the link.`,
+    loginSent: email => `Email sent to ${email}. Enter the code from it — or tap the link if you're reading the email on this device.`,
+    loginCodeBtn: 'SIGN IN',
+    loginCodeInvalid: "That code didn't work or has expired. Check the digits or request a new one.",
+    installIOS: 'Add it to your home screen: tap <b>Share</b> → <b>Add to Home Screen</b>. It will open full screen.',
+    installAndroid: 'Install the app — it will open full screen from your home screen.',
+    installAndroidMenu: 'Add it to your home screen: browser menu <b>⋮</b> → <b>Add to Home screen</b>.',
+    installBtn: 'INSTALL',
     loginOtherEmail: 'USE ANOTHER EMAIL',
     loginError: "Couldn't send the email. Please try again.",
     loginRateLimited: 'Too many attempts. Wait a couple of minutes and try again.',
@@ -1583,9 +1651,29 @@ async function onLoginSubmit() {
     $('login-error').textContent = t(error.status === 429 ? 'loginRateLimited' : 'loginError');
     return;
   }
+  pendingEmail = email;
   $('login-form').hidden = true;
   $('login-sent').hidden = false;
   $('login-sent-text').textContent = t('loginSent')(email);
+  $('login-code').value = '';
+}
+
+// Code entry works where a magic link can't: home-screen apps and in-app browsers keep
+// their own storage, so a link opened in Safari would sign in the wrong place.
+let pendingEmail = '';
+async function onCodeSubmit() {
+  const token = $('login-code').value.replace(/\D/g, '');
+  if (token.length < 6) { $('login-code').focus(); return; }
+  const btn = $('login-code-btn');
+  btn.disabled = true;
+  $('login-error').textContent = '';
+  const { error } = await sb.auth.verifyOtp({ email: pendingEmail, token, type: 'email' });
+  btn.disabled = false;
+  if (error) {
+    console.error(error);
+    $('login-error').textContent = t(error.status === 429 ? 'loginRateLimited' : 'loginCodeInvalid');
+  }
+  // On success onAuthStateChange(SIGNED_IN) takes over
 }
 
 async function signOut() {
@@ -1642,10 +1730,53 @@ const OVERLAY_SCREENS = ['boot-screen', 'login-screen', 'nickname-screen', 'menu
 function showOverlayScreen(id) {
   OVERLAY_SCREENS.forEach(s => $(s).classList.remove('show'));
   $(id).classList.add('show');
+  updateInstallHint();
 }
 
 function hideOverlayScreens() {
   OVERLAY_SCREENS.forEach(s => $(s).classList.remove('show'));
+  updateInstallHint();
+}
+
+// ===================== INSTALL HINT (PWA) =====================
+const INSTALL_DISMISSED_KEY = 'hf_install_hint_dismissed';
+const IS_STANDALONE = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  updateInstallHint();
+});
+window.addEventListener('appinstalled', () => {
+  storageSet(INSTALL_DISMISSED_KEY, '1');
+  deferredInstallPrompt = null;
+  updateInstallHint();
+});
+
+function updateInstallHint() {
+  const onEntryScreen = ['login-screen', 'menu-screen'].some(id => $(id).classList.contains('show'));
+  const show = (IS_IOS || IS_ANDROID) && !IS_STANDALONE && !storageGet(INSTALL_DISMISSED_KEY) && onEntryScreen;
+  $('install-hint').hidden = !show;
+  if (!show) return;
+  const canPrompt = !!deferredInstallPrompt;
+  $('install-hint-text').innerHTML = IS_IOS ? t('installIOS') : canPrompt ? t('installAndroid') : t('installAndroidMenu');
+  $('install-hint-btn').hidden = !canPrompt;
+}
+
+async function onInstallClick() {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice.catch(() => null);
+  deferredInstallPrompt = null;
+  updateInstallHint();
+}
+
+function dismissInstallHint() {
+  storageSet(INSTALL_DISMISSED_KEY, '1');
+  updateInstallHint();
 }
 
 function closeOverlayScreen() {
@@ -2333,6 +2464,9 @@ function applyLanguage(lang) {
   $('login-email').placeholder = t('loginPlaceholder');
   $('login-send-btn').textContent = t('loginSend');
   $('login-other-btn').textContent = t('loginOtherEmail');
+  $('login-code-btn').textContent = t('loginCodeBtn');
+  $('install-hint-btn').textContent = t('installBtn');
+  updateInstallHint();
   $('boot-msg').textContent = t('bootLoading');
   $('boot-retry-btn').textContent = t('bootRetry');
   $('profile-logout-btn').textContent = t('btnLogout');
