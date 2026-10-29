@@ -817,6 +817,7 @@
   }
   #partner-share-btn { margin: 0; max-width: none; }
   #partner-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pstat[hidden], #partner-note[hidden] { display: none; }
   .pstat {
     background: #14141e;
     border: 1px solid #ffffff11;
@@ -1004,10 +1005,10 @@
       <div id="partner-stats">
         <div class="pstat"><span class="pstat-val" id="ps-invited">0</span><span class="pstat-lbl" id="ps-invited-lbl"></span></div>
         <div class="pstat"><span class="pstat-val" id="ps-paying">0</span><span class="pstat-lbl" id="ps-paying-lbl"></span></div>
-        <div class="pstat"><span class="pstat-val" id="ps-earned">0</span><span class="pstat-lbl" id="ps-earned-lbl"></span></div>
-        <div class="pstat"><span class="pstat-val" id="ps-balance">0</span><span class="pstat-lbl" id="ps-balance-lbl"></span></div>
+        <div class="pstat partner-money"><span class="pstat-val" id="ps-earned">0</span><span class="pstat-lbl" id="ps-earned-lbl"></span></div>
+        <div class="pstat partner-money"><span class="pstat-val" id="ps-balance">0</span><span class="pstat-lbl" id="ps-balance-lbl"></span></div>
       </div>
-      <div id="partner-note"></div>
+      <div id="partner-note" class="partner-money"></div>
       <div id="partner-referrer" hidden></div>
     </div>
   </div>
@@ -1299,7 +1300,7 @@ const STRINGS = {
     bootRetry: 'ПОВТОРИТЬ',
     btnLogout: 'ВЫЙТИ ИЗ АККАУНТА',
     sectionPartner: 'ПАРТНЁРСКАЯ ПРОГРАММА',
-    partnerDesc: pct => `Делись своей ссылкой и получай ${pct}% с каждой оплаты тех, кто пришёл по ней.`,
+    partnerDesc: 'Делись своей ссылкой: все, кто зарегистрируется по ней, засчитаются тебе.',
     partnerShare: 'ПОДЕЛИТЬСЯ ССЫЛКОЙ',
     partnerCopied: 'ССЫЛКА СКОПИРОВАНА',
     partnerShareText: 'Тренирую стойку на руках в Handstand Fighter — попробуй:',
@@ -1426,7 +1427,7 @@ const STRINGS = {
     bootRetry: 'TRY AGAIN',
     btnLogout: 'SIGN OUT',
     sectionPartner: 'PARTNER PROGRAM',
-    partnerDesc: pct => `Share your link and earn ${pct}% of every payment from people who join through it.`,
+    partnerDesc: 'Share your link: everyone who signs up through it is credited to you.',
     partnerShare: 'SHARE MY LINK',
     partnerCopied: 'LINK COPIED',
     partnerShareText: "I'm training handstands with Handstand Fighter — try it:",
@@ -1773,7 +1774,10 @@ async function loadPartnerStats() {
   if (error || !data || !data.ref_code) { $('partner-section').hidden = true; return; }
   if (profile && !profile.refCode) { profile.refCode = data.ref_code; cacheProfile(); }
   $('partner-section').hidden = false;
-  $('partner-desc').textContent = t('partnerDesc')(Math.round(Number(data.commission_rate) * 100));
+  $('partner-desc').textContent = t('partnerDesc');
+  // Money is shown only once a partner has actually earned something
+  const hasMoney = Number(data.earned) > 0 || Number(data.paid_out) > 0;
+  document.querySelectorAll('.partner-money').forEach(el => { el.hidden = !hasMoney; });
   $('partner-link').textContent = partnerLink(data.ref_code);
   $('ps-invited').textContent = data.invited;
   $('ps-paying').textContent = data.paying;
