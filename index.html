@@ -790,6 +790,48 @@
   .badge-label { font-size: 12px; color: #ccc; }
   .badge-value { font-family: 'Press Start 2P', monospace; font-size: 13px; color: #f0c040; }
 
+  /* Profile can outgrow the screen; centered flex would clip its top */
+  #profile-screen { justify-content: flex-start; padding-top: calc(32px + env(safe-area-inset-top, 0px)); }
+
+  #partner-section { width: 100%; max-width: 340px; margin-bottom: 20px; }
+  #partner-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid #c080ff44;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  #partner-desc { font-size: 13px; color: #ccc; line-height: 1.45; }
+  #partner-link {
+    font-size: 13px;
+    color: #c080ff;
+    background: #14141e;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    padding: 10px 12px;
+    word-break: break-all;
+    user-select: all;
+    -webkit-user-select: all;
+  }
+  #partner-share-btn { margin: 0; max-width: none; }
+  #partner-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pstat {
+    background: #14141e;
+    border: 1px solid #ffffff11;
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: center;
+  }
+  .pstat-val { font-family: 'Press Start 2P', monospace; font-size: 13px; color: #fff; }
+  .pstat-lbl { font-size: 11px; color: #888; }
+  #partner-note { font-size: 11px; color: #888; line-height: 1.45; }
+  #partner-referrer { font-size: 12px; color: #aaa; }
+
   #profile-achievements {
     width: 100%;
     max-width: 340px;
@@ -895,7 +937,7 @@
   <button class="big-btn" id="menu-play-btn" onclick="showOverlayScreen('mode-screen')"></button>
   <button class="big-btn secondary" id="menu-profile-btn" onclick="openProfile('menu')"></button>
   <button class="big-btn secondary" id="menu-instr-btn" onclick="openInstructions('menu')"></button>
-  <div id="app-version">v0.12</div>
+  <div id="app-version">v0.13</div>
 </div>
 
 <!-- MODE SELECT -->
@@ -950,6 +992,23 @@
       <div id="rank-label"></div>
       <div id="rank-progress-bg"><div id="rank-progress-bar" style="width:0%"></div></div>
       <div id="rank-progress-text"></div>
+    </div>
+  </div>
+
+  <div id="partner-section" hidden>
+    <div class="profile-section-title" id="profile-partner-title"></div>
+    <div id="partner-card">
+      <div id="partner-desc"></div>
+      <div id="partner-link"></div>
+      <button class="big-btn" id="partner-share-btn" onclick="sharePartnerLink()"></button>
+      <div id="partner-stats">
+        <div class="pstat"><span class="pstat-val" id="ps-invited">0</span><span class="pstat-lbl" id="ps-invited-lbl"></span></div>
+        <div class="pstat"><span class="pstat-val" id="ps-paying">0</span><span class="pstat-lbl" id="ps-paying-lbl"></span></div>
+        <div class="pstat"><span class="pstat-val" id="ps-earned">0</span><span class="pstat-lbl" id="ps-earned-lbl"></span></div>
+        <div class="pstat"><span class="pstat-val" id="ps-balance">0</span><span class="pstat-lbl" id="ps-balance-lbl"></span></div>
+      </div>
+      <div id="partner-note"></div>
+      <div id="partner-referrer" hidden></div>
     </div>
   </div>
 
@@ -1239,6 +1298,17 @@ const STRINGS = {
     bootError: 'Не удалось загрузить профиль. Проверь интернет и попробуй снова.',
     bootRetry: 'ПОВТОРИТЬ',
     btnLogout: 'ВЫЙТИ ИЗ АККАУНТА',
+    sectionPartner: 'ПАРТНЁРСКАЯ ПРОГРАММА',
+    partnerDesc: pct => `Делись своей ссылкой и получай ${pct}% с каждой оплаты тех, кто пришёл по ней.`,
+    partnerShare: 'ПОДЕЛИТЬСЯ ССЫЛКОЙ',
+    partnerCopied: 'ССЫЛКА СКОПИРОВАНА',
+    partnerShareText: 'Тренирую стойку на руках в Handstand Fighter — попробуй:',
+    psInvited: 'пригласил',
+    psPaying: 'оплатили',
+    psEarned: 'заработано',
+    psBalance: 'к выплате',
+    partnerNote: 'Выплаты пока вручную: чтобы получить деньги, напиши @errrikko в Telegram.',
+    partnerReferrer: name => `Тебя пригласил: ${name}`,
     nicknamePlaceholder: 'Твой ник',
     btnContinue: 'ПРОДОЛЖИТЬ',
     btnPlay: 'ИГРАТЬ',
@@ -1355,6 +1425,17 @@ const STRINGS = {
     bootError: "Couldn't load your profile. Check your connection and try again.",
     bootRetry: 'TRY AGAIN',
     btnLogout: 'SIGN OUT',
+    sectionPartner: 'PARTNER PROGRAM',
+    partnerDesc: pct => `Share your link and earn ${pct}% of every payment from people who join through it.`,
+    partnerShare: 'SHARE MY LINK',
+    partnerCopied: 'LINK COPIED',
+    partnerShareText: "I'm training handstands with Handstand Fighter — try it:",
+    psInvited: 'invited',
+    psPaying: 'paid',
+    psEarned: 'earned',
+    psBalance: 'to be paid',
+    partnerNote: 'Payouts are manual for now: message @errrikko on Telegram to get paid.',
+    partnerReferrer: name => `You were invited by ${name}`,
     nicknamePlaceholder: 'Your nickname',
     btnContinue: 'CONTINUE',
     btnPlay: 'PLAY',
@@ -1503,6 +1584,7 @@ function rowToProfile(row) {
     bestRepsSession: badgeFromRow(row.best_reps_value, row.best_reps_at),
     bestHoldSession: badgeFromRow(row.best_hold_value, row.best_hold_at),
     hasAccess: !!row.has_access,
+    refCode: row.ref_code || null,
   };
 }
 
@@ -1676,6 +1758,48 @@ async function onCodeSubmit() {
   // On success onAuthStateChange(SIGNED_IN) takes over
 }
 
+// ===================== PARTNER PROGRAM =====================
+const APP_BASE_URL = 'https://errikko.github.io/handstand-fighter/';
+
+function partnerLink(code) { return `${APP_BASE_URL}?ref=${code}`; }
+
+function formatMoney(n) {
+  return new Intl.NumberFormat(LANG === 'ru' ? 'ru-RU' : 'en-US', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(n || 0);
+}
+
+async function loadPartnerStats() {
+  const { data, error } = await sb.rpc('get_my_partner_stats');
+  // Hidden until the partner schema exists and returns this user's code
+  if (error || !data || !data.ref_code) { $('partner-section').hidden = true; return; }
+  if (profile && !profile.refCode) { profile.refCode = data.ref_code; cacheProfile(); }
+  $('partner-section').hidden = false;
+  $('partner-desc').textContent = t('partnerDesc')(Math.round(Number(data.commission_rate) * 100));
+  $('partner-link').textContent = partnerLink(data.ref_code);
+  $('ps-invited').textContent = data.invited;
+  $('ps-paying').textContent = data.paying;
+  $('ps-earned').textContent = formatMoney(data.earned);
+  $('ps-balance').textContent = formatMoney(Number(data.earned) - Number(data.paid_out));
+  $('partner-referrer').hidden = !data.referrer;
+  if (data.referrer) $('partner-referrer').textContent = t('partnerReferrer')(data.referrer);
+}
+
+async function sharePartnerLink() {
+  if (!profile || !profile.refCode) return;
+  const url = partnerLink(profile.refCode);
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Handstand Fighter', text: t('partnerShareText'), url }); return; }
+    catch (err) { if (err.name === 'AbortError') return; }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    const btn = $('partner-share-btn');
+    btn.textContent = t('partnerCopied');
+    setTimeout(() => { btn.textContent = t('partnerShare'); }, 2000);
+  } catch (e) {
+    // Clipboard blocked: the link text itself is selectable
+  }
+}
+
 async function signOut() {
   gameActive = false;
   $('game-view').style.display = 'none';
@@ -1817,6 +1941,7 @@ function badgeIsActive(badge) {
 function renderProfile() {
   $('profile-name').textContent = profile.nickname;
   $('profile-email').textContent = authUser ? authUser.email : '';
+  loadPartnerStats();
 
   const points = profile.totalReps + profile.totalHoldSeconds;
   const rank = getRank(points);
@@ -2470,6 +2595,13 @@ function applyLanguage(lang) {
   $('boot-msg').textContent = t('bootLoading');
   $('boot-retry-btn').textContent = t('bootRetry');
   $('profile-logout-btn').textContent = t('btnLogout');
+  $('profile-partner-title').textContent = t('sectionPartner');
+  $('partner-share-btn').textContent = t('partnerShare');
+  $('ps-invited-lbl').textContent = t('psInvited');
+  $('ps-paying-lbl').textContent = t('psPaying');
+  $('ps-earned-lbl').textContent = t('psEarned');
+  $('ps-balance-lbl').textContent = t('psBalance');
+  $('partner-note').textContent = t('partnerNote');
   $('nickname-input').placeholder = t('nicknamePlaceholder');
   $('nickname-confirm-btn').textContent = t('btnContinue');
 
@@ -3206,7 +3338,8 @@ function drawResultCard(c, d, alpha) {
 
   c.font = `600 34px Inter, sans-serif`;
   c.fillStyle = '#888888';
-  c.fillText(APP_URL_LABEL, W / 2, 1640);
+  const code = profile && profile.refCode;
+  c.fillText(code ? `${APP_URL_LABEL}/?ref=${code}` : APP_URL_LABEL, W / 2, 1640);
   c.restore();
 }
 
