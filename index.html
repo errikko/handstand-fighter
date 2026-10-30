@@ -1772,7 +1772,7 @@ async function loadPartnerStats() {
   const { data, error } = await sb.rpc('get_my_partner_stats');
   // Hidden until the partner schema exists and returns this user's code
   if (error || !data || !data.ref_code) { $('partner-section').hidden = true; return; }
-  if (profile && !profile.refCode) { profile.refCode = data.ref_code; cacheProfile(); }
+  if (profile && profile.refCode !== data.ref_code) { profile.refCode = data.ref_code; cacheProfile(); }
   $('partner-section').hidden = false;
   $('partner-desc').textContent = t('partnerDesc');
   // Money is shown only once a partner has actually earned something
