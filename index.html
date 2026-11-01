@@ -437,6 +437,7 @@
   #upload-bar { width: 100%; max-width: 320px; height: 6px; background: #ffffff22; border-radius: 3px; overflow: hidden; }
   #upload-bar-fill { height: 100%; width: 0; background: #c080ff; transition: width 0.2s; }
   #upload-pct { font-family: 'Press Start 2P', monospace; font-size: 14px; color: #fff; }
+  #upload-overlay.picking #upload-bar, #upload-overlay.picking #upload-pct { display: none; }
   #upload-hint { font-size: 12px; color: #999; max-width: 300px; line-height: 1.4; }
 
   /* ===== TECHNIQUE RESULT ===== */
@@ -938,15 +939,15 @@
   <button class="big-btn" id="menu-play-btn" onclick="showOverlayScreen('mode-screen')"></button>
   <button class="big-btn secondary" id="menu-profile-btn" onclick="openProfile('menu')"></button>
   <button class="big-btn secondary" id="menu-instr-btn" onclick="openInstructions('menu')"></button>
-  <div id="app-version">v0.13</div>
+  <div id="app-version">v0.14</div>
 </div>
 
 <!-- MODE SELECT -->
 <div id="mode-screen" class="menu-screen">
   <div class="screen-title" id="mode-title"></div>
   <button class="big-btn" id="mode-technique-btn" onclick="selectMode('technique')"></button>
-  <button class="big-btn" id="mode-upload-btn" onclick="$('upload-input').click()"></button>
-  <input type="file" id="upload-input" accept="video/*" hidden onchange="onVideoPicked(this)">
+  <button class="big-btn" id="mode-upload-btn" onclick="pickVideo()"></button>
+  <input type="file" id="upload-input" accept="video/*" hidden onchange="onVideoPicked(this)" oncancel="endVideoPick()">
   <button class="big-btn" id="mode-reps-btn" onclick="selectMode('reps')"></button>
   <button class="big-btn" id="mode-hold-btn" onclick="selectMode('hold')"></button>
   <button class="big-btn secondary" id="mode-back-btn" onclick="showOverlayScreen('menu-screen')"></button>
@@ -1383,6 +1384,9 @@ const STRINGS = {
     techResNotSeen: 'Не увидел стойку. В кадре должно быть всё тело — от ладоней до носков, телефон сбоку.',
     modeUpload: 'ТЕХНИКА: ИЗ ВИДЕО',
     uploadAnalyzing: 'АНАЛИЗИРУЮ ВИДЕО',
+    uploadLoading: 'ЗАГРУЖАЮ ВИДЕО…',
+    uploadAnalyzeInterrupted: 'Анализ прервался: приложение свернули. Не закрывай экран, пока идёт анализ, и попробуй ещё раз.',
+    uploadLoadingHint: 'Телефон готовит видео — это может занять несколько секунд.',
     uploadHint: 'Не закрывай экран — это займёт примерно столько же, сколько длится видео.',
     uploadCancel: 'ОТМЕНА',
     uploadFailed: 'Не получилось открыть видео. Попробуй другой файл.',
@@ -1510,6 +1514,9 @@ const STRINGS = {
     techResNotSeen: 'No handstand detected. Your whole body, hands to toes, must be in frame, phone to the side.',
     modeUpload: 'TECHNIQUE: FROM VIDEO',
     uploadAnalyzing: 'ANALYZING VIDEO',
+    uploadLoading: 'LOADING VIDEO…',
+    uploadAnalyzeInterrupted: 'Analysis stopped because the app was minimized. Keep the screen on during analysis and try again.',
+    uploadLoadingHint: 'Your phone is preparing the video — this can take a few seconds.',
     uploadHint: 'Keep the screen on — this takes about as long as the video.',
     uploadCancel: 'CANCEL',
     uploadFailed: "Couldn't open this video. Try another file.",
@@ -2778,7 +2785,30 @@ function setUploadProgress(frac) {
   $('upload-pct').textContent = pct + '%';
 }
 
-function cancelUpload() { uploadCancelled = true; }
+let videoPickPending = false;
+
+// The OS can take seconds to hand over a picked video (iOS converts it first), so show a loading screen right away
+function pickVideo() {
+  videoPickPending = true;
+  hideOverlayScreens();
+  $('upload-overlay').classList.add('show', 'picking');
+  setUploadStage('uploadLoading');
+  $('upload-hint').textContent = t('uploadLoadingHint');
+  $('upload-input').click();
+}
+
+function endVideoPick() {
+  if (!videoPickPending) return;
+  videoPickPending = false;
+  $('upload-overlay').classList.remove('show', 'picking');
+  $('upload-hint').textContent = t('uploadHint');
+  showOverlayScreen('mode-screen');
+}
+
+function cancelUpload() {
+  if (videoPickPending && !uploadActive) { endVideoPick(); return; }
+  uploadCancelled = true;
+}
 
 // Resolves once the frame at t is decoded; time-boxed so a missing iOS event can't hang analysis
 function seekTo(v, t) {
@@ -2815,22 +2845,74 @@ const MAX_UPLOAD_S = 90;
 
 function setUploadStage(titleKey) { $('upload-title').textContent = t(titleKey); }
 
-// Pass 1: step through the clip, run tracking + form analysis, keep a per-sample timeline
+// Pass 1: play the clip and analyze frames as they are shown. Seeking frame by frame is unreliable
+// on iOS for re-exported clips with sparse keyframes (stale or black frames), sequential playback is not.
 async function analyzeUploadedVideo(uv) {
   const dur = uv.duration;
-  const samples = [];
-  let invertedSince = null;
-  let stanceMs = 0;
+  const raw = []; // { t, lm } at whatever frames we managed to analyze
   lmFilters = null;
 
-  for (let i = 0; i * UPLOAD_STEP_S < dur && !uploadCancelled; i++) {
+  await new Promise((resolve, reject) => {
+    let finished = false, busy = false, lastT = -1, lastAdvance = performance.now();
+    let detectMs = 50;
+    const finish = err => {
+      if (finished) return;
+      finished = true;
+      clearInterval(watchdog);
+      uv.pause();
+      err ? reject(err) : resolve();
+    };
+    const onFrame = async t => {
+      if (finished || busy || t <= lastT) return;
+      busy = true;
+      lastT = t;
+      try {
+        const t0 = performance.now();
+        const r = await detectOnce(uv);
+        // Slow phone: slow playback down so we still analyze about 12 frames per second of video
+        detectMs = detectMs * 0.8 + (performance.now() - t0) * 0.2;
+        uv.playbackRate = Math.max(0.25, Math.min(1, 83 / detectMs));
+        const lm = r ? smoothLandmarks(r, uv.videoWidth, uv.videoHeight, t) : null;
+        if (!r) lmFilters = null;
+        raw.push({ t, lm });
+        drawUploadFrame(uv, lm);
+      } catch (e) {}
+      busy = false;
+      setUploadProgress(Math.min(t / dur, 1) * 0.5);
+    };
+    const useRvfc = !!uv.requestVideoFrameCallback;
+    if (useRvfc) {
+      const loop = (now, meta) => { if (finished) return; onFrame(meta.mediaTime); uv.requestVideoFrameCallback(loop); };
+      uv.requestVideoFrameCallback(loop);
+    }
+    const watchdog = setInterval(() => {
+      if (uploadCancelled) return finish();
+      if (document.hidden) return finish(new Error('hidden'));
+      if (!useRvfc) onFrame(uv.currentTime);
+      if (uv.currentTime > lastT || busy) lastAdvance = performance.now();
+      if (uv.ended || uv.currentTime >= dur - 0.05) return finish();
+      // Playback stuck: nudge it, then give up with what we have
+      if (performance.now() - lastAdvance > 1500 && uv.paused) uv.play().catch(() => {});
+      if (performance.now() - lastAdvance > 5000) finish(raw.length ? null : new Error('playback stalled'));
+    }, 1000 / 15);
+    uv.onended = () => setTimeout(() => finish(), 300);
+    uv.currentTime = 0;
+    uv.play().catch(() => {}); // the stall watchdog retries and decides
+  });
+  uv.onended = null;
+  uv.playbackRate = 1;
+
+  // Resample onto a fixed grid for the export pass, then run stance and form logic in order
+  const samples = [];
+  let j = 0, invertedSince = null, stanceMs = 0;
+  for (let i = 0; i * UPLOAD_STEP_S < dur; i++) {
     const t = i * UPLOAD_STEP_S;
-    await seekTo(uv, Math.max(t, 0.001));
-    const raw = await detectOnce(uv);
+    while (j + 1 < raw.length && raw[j + 1].t <= t) j++;
+    const a = raw[j], b = raw[j + 1];
     let lm = null;
-    if (raw) lm = smoothLandmarks(raw, uv.videoWidth, uv.videoHeight, t);
-    else lmFilters = null;
-    drawUploadFrame(uv, lm);
+    if (a && b && a.t <= t && b.t - a.t < 0.4) lm = lerpLandmarks(a.lm, b.lm, (t - a.t) / (b.t - a.t));
+    else if (a && Math.abs(a.t - t) < 0.2) lm = a.lm;
+    else if (b && Math.abs(b.t - t) < 0.2) lm = b.lm;
 
     const sample = { t, lm, visible: false, inStance: false, good: false, issue: null, stanceMs };
     if (lm && isBodyVisible(lm)) {
@@ -2849,7 +2931,6 @@ async function analyzeUploadedVideo(uv) {
       invertedSince = null;
     }
     samples.push(sample);
-    setUploadProgress((t / dur) * 0.5);
   }
   return samples;
 }
@@ -2953,7 +3034,10 @@ function renderUploadedVideo(uv, samples, card) {
 async function onVideoPicked(input) {
   const file = input.files && input.files[0];
   input.value = '';
-  if (!file) return;
+  if (!file) { endVideoPick(); return; }
+  videoPickPending = false;
+  $('upload-overlay').classList.remove('picking');
+  $('upload-hint').textContent = t('uploadHint');
 
   const uv = $('upload-video');
   const url = URL.createObjectURL(file);
@@ -3001,7 +3085,7 @@ async function onVideoPicked(input) {
     }
   } catch (err) {
     console.error(err);
-    errorKey = errorKey || 'uploadFailed';
+    errorKey = errorKey || (err.message === 'hidden' ? 'uploadAnalyzeInterrupted' : 'uploadFailed');
   }
 
   uploadActive = false;
