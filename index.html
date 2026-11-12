@@ -939,7 +939,7 @@
   <button class="big-btn" id="menu-play-btn" onclick="showOverlayScreen('mode-screen')"></button>
   <button class="big-btn secondary" id="menu-profile-btn" onclick="openProfile('menu')"></button>
   <button class="big-btn secondary" id="menu-instr-btn" onclick="openInstructions('menu')"></button>
-  <div id="app-version">v0.14</div>
+  <div id="app-version">v0.15</div>
 </div>
 
 <!-- MODE SELECT -->
@@ -1557,8 +1557,67 @@ const REF_RE = /^[a-z0-9_-]{1,64}$/;
 // Read before the Supabase client consumes the URL hash
 const authErrorInUrl = new URLSearchParams(location.hash.slice(1)).get('error_code');
 
+const AUTH_STORAGE_KEY = 'sb-qjubkzmksxuogqiqggjm-auth-token';
+
+// Session storage: localStorage plus a mirror in IndexedDB. Some browsers block or wipe
+// localStorage on their own; the mirror restores the session from IndexedDB in that case.
+const idbStore = (() => {
+  let dbp = null;
+  const open = () => dbp || (dbp = new Promise((resolve, reject) => {
+    const req = indexedDB.open('hf_auth', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('kv');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  }));
+  const run = (mode, fn) => open().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction('kv', mode);
+    const req = fn(tx.objectStore('kv'));
+    tx.oncomplete = () => resolve(req.result);
+    tx.onerror = () => reject(tx.error);
+  }));
+  const safe = p => Promise.race([p, new Promise(r => setTimeout(() => r(null), 1500))]).catch(() => null);
+  return {
+    get: k => safe(run('readonly', st => st.get(k))),
+    set: (k, v) => safe(run('readwrite', st => st.put(v, k))),
+    del: k => safe(run('readwrite', st => st.delete(k))),
+  };
+})();
+let lastAuthStorageSource = 'none';
+
+const authStorage = {
+  async getItem(key) {
+    let v = null;
+    try { v = localStorage.getItem(key); } catch (e) {}
+    if (v != null) {
+      lastAuthStorageSource = 'localStorage';
+      if (typeof indexedDB !== 'undefined') idbStore.set(key, v); // keep the mirror fresh for existing sessions
+      return v;
+    }
+    v = typeof indexedDB !== 'undefined' ? await idbStore.get(key) : null;
+    if (v != null) {
+      lastAuthStorageSource = 'indexedDB';
+      try { localStorage.setItem(key, v); } catch (e) {}
+    }
+    return v ?? null;
+  },
+  async setItem(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) {}
+    if (typeof indexedDB !== 'undefined') await idbStore.set(key, value);
+  },
+  async removeItem(key) {
+    try { localStorage.removeItem(key); } catch (e) {}
+    if (typeof indexedDB !== 'undefined') await idbStore.del(key);
+  },
+};
+
+// Ask the browser not to evict our data under storage pressure (granted silently or ignored)
+try { navigator.storage?.persist?.(); } catch (e) {}
+
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  auth: {
+    persistSession: true, autoRefreshToken: true, detectSessionInUrl: true,
+    storage: authStorage, storageKey: AUTH_STORAGE_KEY,
+  },
 });
 
 let authUser = null;
@@ -3456,14 +3515,55 @@ async function boot() {
     if (event === 'SIGNED_OUT' && authUser) { authUser = null; profile = null; showLoginForm(); }
   });
 
-  const { data: { session } } = await sb.auth.getSession();
+  let session = null, sessionError = null;
+  try {
+    const res = await sb.auth.getSession();
+    session = res.data.session;
+    sessionError = res.error;
+  } catch (e) { sessionError = e; }
   if (authErrorInUrl) history.replaceState(null, '', location.pathname + location.search);
   if (session) {
     if (!authUser) onSignedIn(session.user);
-  } else {
-    showLoginForm(authErrorInUrl ? 'loginLinkExpired' : null);
+    return;
   }
+  // No network to refresh an expired token: the saved session is still valid, so keep the user
+  // signed in on cached data instead of asking for the email again. Supabase retries the refresh.
+  if (sessionError) {
+    const saved = await authStorage.getItem(AUTH_STORAGE_KEY);
+    try {
+      const user = saved && JSON.parse(saved).user;
+      if (user && user.id) { if (!authUser) onSignedIn(user); return; }
+    } catch (e) {}
+  }
+  showLoginForm(authErrorInUrl ? 'loginLinkExpired' : null);
 }
+// Hidden diagnostics: tap the version label 5 times
+(() => {
+  let taps = 0, timer = null;
+  $('app-version').addEventListener('click', async () => {
+    taps++;
+    clearTimeout(timer);
+    timer = setTimeout(() => { taps = 0; }, 1500);
+    if (taps < 5) return;
+    taps = 0;
+    const lsOk = (() => { try { localStorage.setItem('hf_t', '1'); localStorage.removeItem('hf_t'); return 'ok'; } catch (e) { return 'BLOCKED'; } })();
+    let inLs = false; try { inLs = !!localStorage.getItem(AUTH_STORAGE_KEY); } catch (e) {}
+    const inIdb = typeof indexedDB !== 'undefined' ? !!(await idbStore.get(AUTH_STORAGE_KEY)) : false;
+    let persisted = '?'; try { persisted = String(await navigator.storage?.persisted?.()); } catch (e) {}
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    alert([
+      $('app-version').textContent,
+      'mode: ' + (standalone ? 'home screen app' : 'browser tab'),
+      'signed in: ' + (authUser ? 'yes' : 'no'),
+      'localStorage: ' + lsOk + ', session there: ' + (inLs ? 'yes' : 'no'),
+      'IndexedDB session: ' + (inIdb ? 'yes' : 'no'),
+      'restored from: ' + lastAuthStorageSource,
+      'persistent storage: ' + persisted,
+      navigator.userAgent,
+    ].join('\n'));
+  });
+})();
+
 boot();
 </script>
 </body>
